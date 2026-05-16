@@ -1,0 +1,25 @@
+from django.urls import path
+from .views import (
+    CheckoutView,
+    GenerateRugView,
+    GenerationDetailView,
+    PlaceRugInRoomView,
+    RugOptionsView,
+)
+
+urlpatterns = [
+    # 1. Get dropdown options
+    path('options/', RugOptionsView.as_view(), name='rug-options'),
+
+    # 2. Generate 4 rug designs
+    path('generate/', GenerateRugView.as_view(), name='rug-generate'),
+
+    # 3. Get generation detail + images
+    path('<uuid:generation_id>/', GenerationDetailView.as_view(), name='rug-detail'),
+
+    # 4. Place selected rug in user's room
+    path('place/', PlaceRugInRoomView.as_view(), name='rug-place'),
+
+    # 5. Create Shopify checkout
+    path('checkout/', CheckoutView.as_view(), name='rug-checkout'),
+]
