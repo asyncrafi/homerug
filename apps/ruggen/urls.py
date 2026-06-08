@@ -4,7 +4,9 @@ from .views import (
     GenerateRugView,
     GenerationDetailView,
     PlaceRugInRoomView,
+    PlacementPreviewView,
     RugOptionsView,
+    RugPreviewView,
 )
 
 urlpatterns = [
@@ -22,4 +24,10 @@ urlpatterns = [
 
     # 5. Create Shopify checkout
     path('checkout/', CheckoutView.as_view(), name='rug-checkout'),
+]
+
+
+urlpatterns += [
+    path('<uuid:generation_id>/preview/', RugPreviewView.as_view(), name='rug-preview'),
+    path('placement/<uuid:placement_id>/preview/', PlacementPreviewView.as_view(), name='placement-preview'),
 ]

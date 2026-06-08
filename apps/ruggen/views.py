@@ -307,3 +307,45 @@ class CheckoutView(APIView):
             'price': settings.PRICE_PER_RUG,
             'currency': settings.CURRENCY,
         })
+    
+
+
+
+from django.http import HttpResponse
+
+class RugPreviewView(APIView):
+    def get(self, request, generation_id):
+        try:
+            generation = RugGeneration.objects.prefetch_related('rug_images').get(id=generation_id)
+        except RugGeneration.DoesNotExist:
+            return HttpResponse("Not found", status=404)
+        
+        images_html = ''.join([
+            f'<div style="margin:10px;display:inline-block"><p>Rug {img.index}</p>'
+            f'<img src="data:{img.mime_type};base64,{img.base64_data}" style="width:300px;border-radius:8px"></div>'
+            for img in generation.rug_images.all()
+        ])
+        
+        return HttpResponse(f'''
+            <html><body style="background:#111;color:white;font-family:sans-serif;padding:20px">
+            <h2>Generation: {generation_id}</h2>
+            <h3>Style: {generation.style} | {generation.size} | {generation.material}</h3>
+            {images_html}
+            </body></html>
+        ''')
+    
+
+class PlacementPreviewView(APIView):
+    def get(self, request, placement_id):
+        try:
+            placement = RoomPlacement.objects.get(id=placement_id)
+        except RoomPlacement.DoesNotExist:
+            return HttpResponse("Not found", status=404)
+        
+        return HttpResponse(f'''
+            <html><body style="background:#111;color:white;font-family:sans-serif;padding:20px">
+            <h2>Placement Result</h2>
+            <h3>Status: {placement.status}</h3>
+            <img src="data:image/jpeg;base64,{placement.result_base64}" style="max-width:900px;border-radius:12px">
+            </body></html>
+        ''')
