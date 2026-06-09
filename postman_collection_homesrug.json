@@ -1,0 +1,89 @@
+{
+  "info": {
+    "name": "HomesRug API - Postman Collection",
+    "_postman_id": "homesrug-collection-0001",
+    "description": "Collection for testing the HomesRug API endpoints. Replace {{base_url}} with your server base URL (e.g., http://localhost:8000 or https://your-vps.com).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Options",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/ruggen/options/"
+      }
+    },
+    {
+      "name": "Generate Rugs",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"style\": \"Persian\",\n  \"size\": \"5x8 feet\",\n  \"material\": \"wool\",\n  \"colors\": [\"navy blue\", \"cream\", \"terracotta\"],\n  \"description\": \"medallion pattern with floral border\"\n}"
+        },
+        "url": "{{base_url}}/api/ruggen/generate/"
+      }
+    },
+    {
+      "name": "Get Generation Detail",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/ruggen/:generation_id/",
+        "description": "Replace :generation_id with the generation_id returned from Generate Rugs"
+      }
+    },
+    {
+      "name": "Rug Preview (HTML)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/ruggen/:generation_id/preview/",
+        "description": "HTML preview of generated rugs. Replace :generation_id accordingly."
+      }
+    },
+    {
+      "name": "Place Rug In Room",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"generation_id\": \"<paste_generation_id_here>\",\n  \"selected_rug_index\": 0,\n  \"room_image_base64\": \"<paste_room_image_base64_here>\"\n}"
+        },
+        "url": "{{base_url}}/api/ruggen/place/",
+        "description": "POST room photo base64 and selected rug index. Use data URI (data:image/jpeg;base64,...) or raw base64."
+      }
+    },
+    {
+      "name": "Placement Preview (HTML)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/ruggen/placement/:placement_id/preview/",
+        "description": "HTML preview of the placed rug. Replace :placement_id accordingly."
+      }
+    },
+    {
+      "name": "Checkout (Shopify or Mock)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"placement_id\": \"<paste_placement_id_here>\"\n}"
+        },
+        "url": "{{base_url}}/api/ruggen/checkout/",
+        "description": "Creates Shopify draft (if configured) or returns mock checkout URL for testing."
+      }
+    }
+  ]
+}
