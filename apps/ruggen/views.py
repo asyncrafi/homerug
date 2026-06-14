@@ -1,6 +1,7 @@
 import logging
 
 from django.conf import settings
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,14 +16,37 @@ from .serializers import (
 )
 from .utils.gemini import generate_rug_images, place_rug_in_room
 from .utils.shopify import create_draft_product, get_checkout_url, upload_image_to_shopify
+from .utils.pricing import calculate_price
 
 logger = logging.getLogger(__name__)
+
+# Max AI generations allowed per session/IP
+MAX_GENERATIONS = 3
+GENERATION_LIMIT_KEY = 'rug_generation_count'
+
+BLOCKED_MESSAGE = (
+    "We're sorry you're not completely happy with your designs. "
+    "Please email customercare@maiahomes.com and someone will help you further."
+)
+
+
+def _get_generation_count(request) -> int:
+    """Return how many generations this session has used."""
+    return request.session.get(GENERATION_LIMIT_KEY, 0)
+
+
+def _increment_generation_count(request) -> int:
+    """Increment and persist the session generation counter. Returns new count."""
+    count = request.session.get(GENERATION_LIMIT_KEY, 0) + 1
+    request.session[GENERATION_LIMIT_KEY] = count
+    request.session.modified = True
+    return count
 
 
 class RugOptionsView(APIView):
     """
-    GET /api/rugs/options/
-    No auth needed. Returns all dropdown options for the frontend.
+    GET /api/ruggen/options/
+    No auth needed. Returns all options + pricing info for the frontend.
     """
     def get(self, request):
         return Response({
@@ -30,54 +54,79 @@ class RugOptionsView(APIView):
                 'Persian', 'Moroccan', 'Bohemian', 'Modern', 'Geometric',
                 'Scandinavian', 'Traditional', 'Contemporary', 'Tribal', 'Abstract',
             ],
-            'sizes': [
-                '2x3 feet', '3x5 feet', '4x6 feet', '5x8 feet',
-                '6x9 feet', '8x10 feet', '9x12 feet', 'Runner (2x8 feet)',
+            'materials': [
+                'New Zealand Wool',
+                'Silk',
+                'Wool',
+                'Cotton',
+                'Jute',
+                'Synthetic',
+                'Bamboo',
             ],
-            'materials': ['wool', 'cotton', 'jute', 'synthetic', 'silk', 'bamboo'],
             'suggested_colors': [
                 'navy blue', 'cream', 'terracotta', 'forest green', 'burgundy',
                 'charcoal', 'ivory', 'rust', 'sage green', 'camel', 'black', 'gold',
             ],
-            'price_per_rug': settings.PRICE_PER_RUG,
-            'currency': settings.CURRENCY,
+            # Pricing info
+            'pricing': {
+                'base_rate_per_sqft': 39,
+                'premium_rate_per_sqft': 49,
+                'premium_materials': ['New Zealand Wool', 'Silk'],
+                'currency': settings.CURRENCY,
+                'note': 'Price calculated per square foot. Always ends in $9.',
+            },
+            # Size guidance (free-text input — ft or cm both accepted)
+            'size_guidance': {
+                'minimum': '3x3 feet (91x91 cm)',
+                'unit_options': ['feet', 'ft', 'cm'],
+                'examples': [
+                    '3x5 feet', '4x6 feet', '5x8 feet',
+                    '6x9 feet', '8x10 feet', '9x12 feet',
+                    '90x150 cm', '120x180 cm', '150x240 cm',
+                ],
+                'hint': 'You can type any custom size, e.g. "7x11 feet" or "200x300 cm"',
+            },
             'images_per_generation': 4,
+            'max_generations': MAX_GENERATIONS,
+            'generations_used': _get_generation_count(request),
+            'generations_remaining': max(0, MAX_GENERATIONS - _get_generation_count(request)),
         })
 
 
 class GenerateRugView(APIView):
     """
-    POST /api/rugs/generate/
+    POST /api/ruggen/generate/
 
     Request body (JSON):
     {
         "style": "Persian",
-        "size": "5x8 feet",
-        "material": "wool",
-        "colors": ["navy blue", "cream", "terracotta"],
+        "size": "5x8 feet",          // or "150x240 cm"
+        "material": "New Zealand Wool",
+        "colors": ["navy blue", "cream", "burnt orange"],   // free-text, no limit
         "description": "medallion pattern with floral border"   // optional
-    }
-
-    Response:
-    {
-        "generation_id": "uuid",
-        "status": "generated",
-        "images": [
-            {"index": 0, "base64_data": "/9j/...", "mime_type": "image/jpeg"},
-            {"index": 1, ...},
-            {"index": 2, ...},
-            {"index": 3, ...}
-        ],
-        "params": {...},
-        "next_step": "POST /api/rugs/place/ with generation_id + selected_rug_index + room_image_base64"
     }
     """
     def post(self, request):
+        # ── Generation limit check ──────────────────────────────────────────
+        current_count = _get_generation_count(request)
+        if current_count >= MAX_GENERATIONS:
+            return Response(
+                {
+                    'error': 'generation_limit_reached',
+                    'message': BLOCKED_MESSAGE,
+                    'contact': 'customercare@maiahomes.com',
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = GenerateRugSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
+
+        # ── Calculate price before creating the record ──────────────────────
+        pricing = calculate_price(data['size'], data['material'])
 
         generation = RugGeneration.objects.create(
             style=data['style'],
@@ -93,7 +142,7 @@ class GenerateRugView(APIView):
                 style=data['style'],
                 colors=data['colors'],
                 material=data['material'],
-                size=data['size'],      
+                size=data['size'],
                 description=data.get('description', ''),
                 num_images=4,
             )
@@ -118,6 +167,9 @@ class GenerateRugView(APIView):
         generation.status = 'generated'
         generation.save()
 
+        # ── Increment session counter only on success ───────────────────────
+        new_count = _increment_generation_count(request)
+
         return Response({
             'generation_id': str(generation.id),
             'status': 'generated',
@@ -132,13 +184,16 @@ class GenerateRugView(APIView):
                 'colors': generation.colors,
                 'description': generation.description,
             },
-            'next_step': 'POST /api/rugs/place/ with generation_id + selected_rug_index + room_image_base64',
+            'pricing': pricing,
+            'generations_used': new_count,
+            'generations_remaining': max(0, MAX_GENERATIONS - new_count),
+            'next_step': 'POST /api/ruggen/place/ with generation_id + selected_rug_index + room_image_base64',
         }, status=status.HTTP_201_CREATED)
 
 
 class GenerationDetailView(APIView):
     """
-    GET /api/rugs/<generation_id>/
+    GET /api/ruggen/<generation_id>/
     Retrieve generation status and all 4 rug images.
     """
     def get(self, request, generation_id):
@@ -151,23 +206,13 @@ class GenerationDetailView(APIView):
 
 class PlaceRugInRoomView(APIView):
     """
-    POST /api/rugs/place/
+    POST /api/ruggen/place/
 
     Request body (JSON):
     {
         "generation_id": "uuid-from-step-1",
-        "selected_rug_index": 2,          // 0-3, which of the 4 rugs
-        "room_image_base64": "/9j/..."    // base64 of user's room photo
-                                          // OR "data:image/jpeg;base64,/9j/..." (data URI also accepted)
-    }
-
-    Response:
-    {
-        "placement_id": "uuid",
-        "status": "placed",
-        "result_base64": "/9j/...",    // room photo with rug placed in it
-        "mime_type": "image/jpeg",
-        "next_step": "POST /api/rugs/checkout/ with placement_id"
+        "selected_rug_index": 2,
+        "room_image_base64": "/9j/..."   // or data URI
     }
     """
     def post(self, request):
@@ -219,33 +264,27 @@ class PlaceRugInRoomView(APIView):
         placement.status = 'placed'
         placement.save()
 
+        # Calculate price to include in placement response
+        pricing = calculate_price(generation.size, generation.material)
+
         return Response({
             'placement_id': str(placement.id),
             'status': 'placed',
             'result_base64': result_b64,
             'mime_type': 'image/jpeg',
-            'next_step': 'POST /api/rugs/checkout/ with placement_id',
+            'pricing': pricing,
+            'next_step': 'POST /api/ruggen/checkout/ with placement_id',
         }, status=status.HTTP_201_CREATED)
 
 
 class CheckoutView(APIView):
     """
-    POST /api/rugs/checkout/
+    POST /api/ruggen/checkout/
 
     Request body (JSON):
     {
         "placement_id": "uuid-from-step-2"
     }
-
-    Response:
-    {
-        "checkout_url": "https://malahomes.myshopify.com/cart/...",
-        "shopify_image_url": "https://cdn.shopify.com/...",
-        "price": 29.99,
-        "currency": "USD"
-    }
-
-    NOTE: If Shopify credentials are not configured, returns mock checkout data for testing.
     """
     def post(self, request):
         serializer = CheckoutSerializer(data=request.data)
@@ -265,17 +304,20 @@ class CheckoutView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        gen = placement.generation
+        pricing = calculate_price(gen.size, gen.material)
+
         # If no Shopify credentials, return mock for testing
         if not settings.SHOPIFY_ADMIN_API_TOKEN:
             return Response({
                 'checkout_url': 'https://malahomes.myshopify.com/cart/MOCK_VARIANT:1',
                 'shopify_image_url': None,
-                'price': settings.PRICE_PER_RUG,
-                'currency': settings.CURRENCY,
+                'price': pricing['price'],
+                'currency': pricing['currency'],
+                'pricing_breakdown': pricing,
                 'note': 'Shopify credentials not configured — mock response for testing',
             })
 
-        gen = placement.generation
         shopify_url = upload_image_to_shopify(
             image_b64=placement.result_base64,
             filename=f'maia-rug-{placement.id}.jpg',
@@ -287,7 +329,7 @@ class CheckoutView(APIView):
             size=gen.size,
             material=gen.material,
             colors=gen.colors,
-            price=settings.PRICE_PER_RUG,
+            price=pricing['price'],        # dynamic price, not flat setting
         )
 
         checkout_url = ''
@@ -304,14 +346,13 @@ class CheckoutView(APIView):
         return Response({
             'checkout_url': checkout_url,
             'shopify_image_url': shopify_url,
-            'price': settings.PRICE_PER_RUG,
-            'currency': settings.CURRENCY,
+            'price': pricing['price'],
+            'currency': pricing['currency'],
+            'pricing_breakdown': pricing,
         })
-    
 
 
-
-from django.http import HttpResponse
+# ── Debug preview views (dev only) ─────────────────────────────────────────
 
 class RugPreviewView(APIView):
     def get(self, request, generation_id):
@@ -319,33 +360,40 @@ class RugPreviewView(APIView):
             generation = RugGeneration.objects.prefetch_related('rug_images').get(id=generation_id)
         except RugGeneration.DoesNotExist:
             return HttpResponse("Not found", status=404)
-        
+
+        pricing = calculate_price(generation.size, generation.material)
+
         images_html = ''.join([
             f'<div style="margin:10px;display:inline-block"><p>Rug {img.index}</p>'
             f'<img src="data:{img.mime_type};base64,{img.base64_data}" style="width:300px;border-radius:8px"></div>'
             for img in generation.rug_images.all()
         ])
-        
+
         return HttpResponse(f'''
             <html><body style="background:#111;color:white;font-family:sans-serif;padding:20px">
             <h2>Generation: {generation_id}</h2>
             <h3>Style: {generation.style} | {generation.size} | {generation.material}</h3>
+            <h4>Price: ${pricing["price"]} {pricing["currency"]} 
+                ({pricing["sqft"]} sqft × ${pricing["rate"]}/sqft)</h4>
             {images_html}
             </body></html>
         ''')
-    
+
 
 class PlacementPreviewView(APIView):
     def get(self, request, placement_id):
         try:
-            placement = RoomPlacement.objects.get(id=placement_id)
+            placement = RoomPlacement.objects.select_related('generation').get(id=placement_id)
         except RoomPlacement.DoesNotExist:
             return HttpResponse("Not found", status=404)
-        
+
+        pricing = calculate_price(placement.generation.size, placement.generation.material)
+
         return HttpResponse(f'''
             <html><body style="background:#111;color:white;font-family:sans-serif;padding:20px">
             <h2>Placement Result</h2>
             <h3>Status: {placement.status}</h3>
+            <h4>Price: ${pricing["price"]} {pricing["currency"]}</h4>
             <img src="data:image/jpeg;base64,{placement.result_base64}" style="max-width:900px;border-radius:12px">
             </body></html>
         ''')
