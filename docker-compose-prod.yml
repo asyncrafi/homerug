@@ -3,9 +3,9 @@ version: '3.8'
 services:
   backend:
     build: .
-    container_name: arabian_backend
+    container_name: homesrug_backend
     ports:
-      - "8000:8000"
+      - "8020:8000"
     volumes:
       - .:/app
       - static_volume:/app/staticfiles
@@ -20,7 +20,7 @@ services:
 
   celery:
     build: .
-    container_name: arabian_celery
+    container_name: homesrug_celery
     command: celery -A config worker --loglevel=info --concurrency=2
     volumes:
       - .:/app
@@ -33,7 +33,7 @@ services:
 
   celery_beat:
     build: .
-    container_name: arabian_celery_beat
+    container_name: homesrug_celery_beat
     command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - .:/app
@@ -46,27 +46,27 @@ services:
 
   db:
     image: postgres:15
-    container_name: arabian_db
+    container_name: homesrug_db
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     env_file:
       - .env
     ports:
-      - "5432:5432"
+      - "5410:5432"
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    container_name: arabian_redis
+    container_name: homesrug_redis
     ports:
-      - "6379:6379"
+      - "6310:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
 
   nginx:
     image: nginx:alpine
-    container_name: arabian_nginx
+    container_name: homesrug_nginx
     ports:
       - "80:80"
       - "443:443"

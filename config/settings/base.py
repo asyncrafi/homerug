@@ -255,3 +255,7 @@ REVENUECAT_PUBLIC_KEY_IOS = env("REVENUECAT_PUBLIC_KEY_IOS", default="appl_your_
 REVENUECAT_SECRET_KEY = env("REVENUECAT_SECRET_KEY", default="secrect_key ")
 
 PRICE_PER_RUG = env("PRICE_PER_RUG", default="19.99")
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "ngrok-skip-browser-warning",
+]

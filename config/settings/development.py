@@ -33,3 +33,7 @@ DEFAULT_FROM_EMAIL = env.str('DEFAULT_FROM_EMAIL_DEV', default='no-reply@example
 BREVO_API_KEY = env.str('BREVO_API_KEY')
 BREVO_FROM_EMAIL = env.str('BREVO_FROM_EMAIL')
 BREVO_FROM_NAME = env.str('BREVO_FROM_NAME')
+CSRF_TRUSTED_ORIGINS = [
+    "https://delta-blaming-bleach.ngrok-free.dev",
+    "https://allcoastdistributors-com.myshopify.com",
+]
