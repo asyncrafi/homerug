@@ -1,22 +1,23 @@
 from PIL import Image, ImageDraw, ImageFont
 
-
 def apply_watermark(pil_img: Image.Image, text: str = 'Maia Homes') -> Image.Image:
     img = pil_img.copy().convert('RGBA')
     overlay = Image.new('RGBA', img.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay)
 
-    font_size = img.width // 14
+    font_size = img.width // 10  # slightly bigger looks better centered
     font = _load_font(font_size)
 
     bbox = draw.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
-    x = img.width - tw - 20
-    y = img.height - th - 20
 
-    draw.text((x + 2, y + 2), text, font=font, fill=(0, 0, 0, 110))
-    draw.text((x, y), text, font=font, fill=(255, 255, 255, 175))
+    # Center on the image
+    x = (img.width - tw) // 2
+    y = (img.height - th) // 2
+
+    draw.text((x + 2, y + 2), text, font=font, fill=(0, 0, 0, 110))   # shadow
+    draw.text((x, y), text, font=font, fill=(255, 255, 255, 175))      # white text
 
     return Image.alpha_composite(img, overlay).convert('RGB')
 
