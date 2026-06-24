@@ -5,10 +5,9 @@ print("🚀 Running in PRODUCTION mode")
 
 DEBUG = False
 
-# Set your production domain
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
-# Security settings for production
+# Security settings
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
@@ -18,22 +17,29 @@ SECURE_HSTS_PRELOAD = True
 SECURE_SSL_REDIRECT = False
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
-
-CORS_ALLOW_ALL_ORIGINS = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 CSRF_TRUSTED_ORIGINS = [
     "https://api.personalizerug.com",
     "https://www.personalizerug.com",
-    "https://api.personalizerug.com",
-    "http://personalizerug.com", 
+    "http://personalizerug.com",
     "http://www.personalizerug.com",
     "http://api.personalizerug.com",
+    "https://maiahomes.com",
+    "https://www.maiahomes.com",
+    "https://maia-home-goods.myshopify.com",
 ]
+
+# CORS
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CORS_ALLOWED_ORIGINS = [
+    "https://maiahomes.com",
+    "https://www.maiahomes.com",
+    "https://maia-home-goods.myshopify.com",
+]
 
-# Database configuration
+# Database
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -45,12 +51,11 @@ DATABASES = {
     }
 }
 
-# Email configuration for production
-
+# Email
 EMAIL_HOST = env.str('EMAIL_HOST')
 EMAIL_PORT = env.int('EMAIL_PORT')
 EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS')
-EMAIL_USE_SSL= env.bool('EMAIL_USE_SSL')
+EMAIL_USE_SSL = env.bool('EMAIL_USE_SSL')
 EMAIL_HOST_USER = env.str('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = env.str('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = env.str('DEFAULT_FROM_EMAIL')
@@ -59,11 +64,10 @@ BREVO_API_KEY = env.str('BREVO_API_KEY')
 BREVO_FROM_EMAIL = env.str('BREVO_FROM_EMAIL')
 BREVO_FROM_NAME = env.str('BREVO_FROM_NAME')
 
-
-# Static files with WhiteNoise
+# Static files
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# Production logging
+# Logging
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -94,11 +98,3 @@ def log_csrf_failure(request, reason=""):
     logger.warning('CSRF verification failed: %s', reason)
 
 CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
-
-CSRF_TRUSTED_ORIGINS = [
-    "https://api.personalizerug.com",
-    "https://maiahomes.com/pages/mat-configurator",
-    "https://www.personalizerug.com",
-    "https://maiahomes.com",
-    
-]
