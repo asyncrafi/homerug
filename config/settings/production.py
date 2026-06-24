@@ -22,12 +22,12 @@ CSRF_COOKIE_SECURE = True
 CORS_ALLOW_ALL_ORIGINS = True
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://preachly.app",
-    "https://www.preachly.app",
-    "https://api.preachly.app",
-    "http://preachly.app", 
-    "http://www.preachly.app",
-    "http://api.preachly.app",
+    "https://api.personalizerug.com",
+    "https://www.personalizerug.com",
+    "https://api.personalizerug.com",
+    "http://personalizerug.com", 
+    "http://www.personalizerug.com",
+    "http://api.personalizerug.com",
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False
@@ -94,3 +94,11 @@ def log_csrf_failure(request, reason=""):
     logger.warning('CSRF verification failed: %s', reason)
 
 CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://api.personalizerug.com",
+    "https://maiahomes.com/pages/mat-configurator",
+    "https://www.personalizerug.com",
+    "https://maiahomes.com",
+    
+]
