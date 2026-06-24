@@ -23,3 +23,4 @@ urlpatterns = [
     path("api/ruggen/", include("apps.ruggen.urls")),
 ]
 
+    

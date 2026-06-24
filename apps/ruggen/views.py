@@ -310,7 +310,7 @@ class CheckoutView(APIView):
         # If no Shopify credentials, return mock for testing
         if not settings.SHOPIFY_ADMIN_API_TOKEN:
             return Response({
-                'checkout_url': 'https://malahomes.myshopify.com/cart/MOCK_VARIANT:1',
+                'checkout_url': 'https://maia-home-goods.myshopify.com/cart/MOCK_VARIANT:1',
                 'shopify_image_url': None,
                 'price': pricing['price'],
                 'currency': pricing['currency'],
