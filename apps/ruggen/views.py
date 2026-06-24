@@ -324,18 +324,20 @@ class CheckoutView(APIView):
         )
 
         product = create_draft_product(
-            image_url=shopify_url or '',
+            image_b64=placement.result_base64,  # pass base64 directly
             style=gen.style,
             size=gen.size,
             material=gen.material,
             colors=gen.colors,
-            price=pricing['price'],        # dynamic price, not flat setting
+            price=pricing['price'],
         )
 
         checkout_url = ''
         if product:
             variant_id = product['variants'][0]['id']
             checkout_url = get_checkout_url(variant_id)
+            # grab the image url from the created product
+            shopify_url = product.get('images', [{}])[0].get('src', '')
             placement.shopify_product_id = str(product['id'])
             placement.shopify_variant_id = str(variant_id)
 

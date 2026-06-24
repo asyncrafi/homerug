@@ -24,16 +24,16 @@ def upload_image_to_shopify(image_b64: str, filename: str = 'generated-rug.jpg')
     return None
 
 
-def create_draft_product(image_url: str, style: str, size: str, material: str, colors: list, price: float) -> dict | None:
+def create_draft_product(image_b64: str, style: str, size: str, material: str, colors: list, price: float) -> dict | None:
     payload = {
         'product': {
             'title': f"Custom AI Rug — {style} | {size} | {material}",
             'body_html': f"<p>AI-generated custom rug. Style: {style}, Size: {size}, Material: {material}, Colors: {', '.join(colors)}</p>",
             'vendor': 'Maia Homes',
             'product_type': 'Rug',
-            'status': 'draft',
+            'status': 'active',
             'variants': [{'price': str(price), 'requires_shipping': True}],
-            'images': [{'src': image_url}] if image_url else [],
+            'images': [{'attachment': image_b64, 'filename': 'custom-rug.jpg'}],
             'tags': f'ai-generated,{style},{material},custom-rug',
         }
     }
@@ -41,7 +41,6 @@ def create_draft_product(image_url: str, style: str, size: str, material: str, c
     if resp.status_code in (200, 201):
         return resp.json().get('product')
     return None
-
 
 def get_checkout_url(variant_id: int) -> str:
     return f"https://{settings.SHOPIFY_STORE_DOMAIN}/cart/{variant_id}:1"
