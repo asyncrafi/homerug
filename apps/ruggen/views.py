@@ -2,11 +2,12 @@ import logging
 
 from django.conf import settings
 from django.http import HttpResponse
+from drf_spectacular.utils import F
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import GeneratedRugImage, RugGeneration, RoomPlacement
+from .models import GeneratedRugImage, GenerationQuota, RugGeneration, RoomPlacement
 from .serializers import (
     CheckoutSerializer,
     GenerateRugSerializer,
@@ -99,17 +100,24 @@ class GenerateRugView(APIView):
 
     Request body (JSON):
     {
+        "email": "user@example.com",
         "style": "Persian",
-        "size": "5x8 feet",          // or "150x240 cm"
+        "size": "5x8 feet",
         "material": "New Zealand Wool",
-        "colors": ["navy blue", "cream", "burnt orange"],   // free-text, no limit
+        "colors": ["navy blue", "cream", "burnt orange"],
         "description": "medallion pattern with floral border"   // optional
     }
     """
     def post(self, request):
-        # ── Generation limit check ──────────────────────────────────────────
-        current_count = _get_generation_count(request)
-        if current_count >= MAX_GENERATIONS:
+        serializer = GenerateRugSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        email = data['email']
+
+        quota, _ = GenerationQuota.objects.get_or_create(email=email)
+        if quota.count >= MAX_GENERATIONS:
             return Response(
                 {
                     'error': 'generation_limit_reached',
@@ -119,13 +127,6 @@ class GenerateRugView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        serializer = GenerateRugSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        data = serializer.validated_data
-
-        # ── Calculate price before creating the record ──────────────────────
         pricing = calculate_price(data['size'], data['material'])
 
         generation = RugGeneration.objects.create(
@@ -167,8 +168,8 @@ class GenerateRugView(APIView):
         generation.status = 'generated'
         generation.save()
 
-        # ── Increment session counter only on success ───────────────────────
-        new_count = _increment_generation_count(request)
+        quota.count = F('count') + 1
+        quota.save(update_fields=['count'])
 
         return Response({
             'generation_id': str(generation.id),
@@ -185,8 +186,8 @@ class GenerateRugView(APIView):
                 'description': generation.description,
             },
             'pricing': pricing,
-            'generations_used': new_count,
-            'generations_remaining': max(0, MAX_GENERATIONS - new_count),
+            'generations_used': quota.count,
+            'generations_remaining': max(0, MAX_GENERATIONS - quota.count),
             'next_step': 'POST /api/ruggen/place/ with generation_id + selected_rug_index + room_image_base64',
         }, status=status.HTTP_201_CREATED)
 

@@ -74,3 +74,16 @@ class RoomPlacement(models.Model):
 
     def __str__(self):
         return f"Placement {self.id} | {self.status}"
+    
+
+class GenerationQuota(models.Model):
+    email = models.EmailField(unique=True)
+    count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ruggen_generation_quota'
+
+    def __str__(self):
+        return f"{self.email} | {self.count}/3"

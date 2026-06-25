@@ -18,7 +18,6 @@ MATERIALS = [
     'Bamboo',
 ]
 
-
 class GenerateRugSerializer(serializers.Serializer):
     style = serializers.ChoiceField(choices=STYLES)
 
@@ -29,6 +28,8 @@ class GenerateRugSerializer(serializers.Serializer):
     )
 
     material = serializers.ChoiceField(choices=MATERIALS)
+
+    email = serializers.EmailField()
 
     # Free-text colors — no max limit, each color up to 100 chars
     colors = serializers.ListField(
@@ -78,7 +79,6 @@ class RugGenerationSerializer(serializers.ModelSerializer):
             'id', 'created_at', 'style', 'size', 'material',
             'colors', 'description', 'status', 'rug_images',
         ]
-
 
 class RoomPlacementSerializer(serializers.ModelSerializer):
     class Meta:
