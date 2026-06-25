@@ -170,6 +170,7 @@ class GenerateRugView(APIView):
 
         quota.count = F('count') + 1
         quota.save(update_fields=['count'])
+        quota.refresh_from_db()
 
         return Response({
             'generation_id': str(generation.id),
@@ -190,7 +191,6 @@ class GenerateRugView(APIView):
             'generations_remaining': max(0, MAX_GENERATIONS - quota.count),
             'next_step': 'POST /api/ruggen/place/ with generation_id + selected_rug_index + room_image_base64',
         }, status=status.HTTP_201_CREATED)
-
 
 class GenerationDetailView(APIView):
     """
