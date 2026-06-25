@@ -38,6 +38,7 @@ def create_draft_product(image_b64: str, style: str, size: str, material: str, c
         }
     }
     resp = requests.post(f"{_base()}/products.json", json=payload, headers=_headers(), timeout=30)
+    print(f"[SHOPIFY] status={resp.status_code} body={resp.text[:500]}")  # ← add this
     if resp.status_code in (200, 201):
         return resp.json().get('product')
     return None
