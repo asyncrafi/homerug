@@ -38,7 +38,7 @@ class GenerateRugSerializer(serializers.Serializer):
         help_text='List of color names, e.g. ["navy blue", "cream", "burnt orange"]',
     )
 
-    description = serializers.CharField(max_length=500, required=False, default='')
+    description = serializers.CharField(max_length=500, required=False, default='', allow_blank=True)
 
     def validate_size(self, value):
         try:
