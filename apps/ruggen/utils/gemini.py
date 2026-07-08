@@ -15,8 +15,13 @@ from typing import List
 
 from django.conf import settings
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 from PIL import Image
+from tenacity import (
+    retry, stop_after_attempt, wait_exponential,
+    retry_if_exception_type, before_sleep_log,
+)
 
 from .watermark import apply_watermark
 
@@ -25,6 +30,36 @@ logger = logging.getLogger(__name__)
 
 def _client() -> genai.Client:
     return genai.Client(api_key=settings.GEMINI_API_KEY)
+
+
+# Retry only on transient server-side errors, not on bad requests (400s)
+RETRYABLE_ERRORS = (genai_errors.ServerError,)
+
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
+    retry=retry_if_exception_type(RETRYABLE_ERRORS),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+)
+def _generate_images_with_retry(client, model, prompt, config):
+    return client.models.generate_images(model=model, prompt=prompt, config=config)
+
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
+    retry=retry_if_exception_type(RETRYABLE_ERRORS),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+)
+def _generate_content_with_retry(client, model, contents, config):
+    return client.models.generate_content(
+        model=model,
+        contents=contents,
+        config=config,
+    )
 
 
 # ─────────────────────────────────────────────
@@ -60,15 +95,20 @@ def generate_rug_images(
 
     logger.info("Generating %d rug images | style=%s material=%s", num_images, style, material)
 
-    response = client.models.generate_images(
-        model=settings.GEMINI_IMAGEN_MODEL,
-        prompt=prompt,
-        config=types.GenerateImagesConfig(
-            number_of_images=num_images,
-            aspect_ratio='1:1',
-            output_mime_type='image/jpeg',
-        ),
-    )
+    try:
+        response = _generate_images_with_retry(
+            client,
+            settings.GEMINI_IMAGEN_MODEL,
+            prompt,
+            types.GenerateImagesConfig(
+                number_of_images=num_images,
+                aspect_ratio='1:1',
+                output_mime_type='image/jpeg',
+            ),
+        )
+    except genai_errors.ServerError as e:
+        logger.error("Imagen unavailable after retries: %s", e)
+        raise
 
     results = []
     for img_data in response.generated_images:
@@ -119,24 +159,29 @@ def place_rug_in_room(room_image_b64: str, rug_image_b64: str) -> str:
 
     logger.info("Placing rug in room via Gemini vision...")
 
-    response = client.models.generate_content(
-        model=settings.GEMINI_VISION_MODEL,
-        contents=[
-            types.Content(
-                role='user',
-                parts=[
-                    types.Part.from_text(text="Room photo:"),
-                    room_part,
-                    types.Part.from_text(text="Rug to place in the room:"),
-                    rug_part,
-                    types.Part.from_text(text=prompt),
-                ],
-            )
-        ],
-        config=types.GenerateContentConfig(
-            response_modalities=['IMAGE', 'TEXT'],
-        ),
-    )
+    try:
+        response = _generate_content_with_retry(
+            client,
+            settings.GEMINI_VISION_MODEL,
+            [
+                types.Content(
+                    role='user',
+                    parts=[
+                        types.Part.from_text(text="Room photo:"),
+                        room_part,
+                        types.Part.from_text(text="Rug to place in the room:"),
+                        rug_part,
+                        types.Part.from_text(text=prompt),
+                    ],
+                )
+            ],
+            types.GenerateContentConfig(
+                response_modalities=['IMAGE', 'TEXT'],
+            ),
+        )
+    except genai_errors.ServerError as e:
+        logger.error("Room placement unavailable after retries: %s", e)
+        raise
 
     # Extract image from response
     for part in response.candidates[0].content.parts:
