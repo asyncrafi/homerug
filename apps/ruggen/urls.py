@@ -3,8 +3,6 @@ from .views import (
     CheckoutView,
     GenerateRugView,
     GenerationDetailView,
-    PlaceRugInRoomView,
-    PlacementPreviewView,
     RugOptionsView,
     RugPreviewView,
 )
@@ -19,15 +17,12 @@ urlpatterns = [
     # 3. Get generation detail + images
     path('<uuid:generation_id>/', GenerationDetailView.as_view(), name='rug-detail'),
 
-    # 4. Place selected rug in user's room
-    path('place/', PlaceRugInRoomView.as_view(), name='rug-place'),
-
-    # 5. Create Shopify checkout
+    # 4. Create Shopify checkout directly from a selected generated rug
     path('checkout/', CheckoutView.as_view(), name='rug-checkout'),
 ]
 
 
 urlpatterns += [
     path('<uuid:generation_id>/preview/', RugPreviewView.as_view(), name='rug-preview'),
-    path('placement/<uuid:placement_id>/preview/', PlacementPreviewView.as_view(), name='placement-preview'),
+    # path('placement/<uuid:placement_id>/preview/', PlacementPreviewView.as_view(), name='placement-preview'),
 ]

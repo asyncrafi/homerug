@@ -2,9 +2,11 @@
 Rug pricing utility.
 
 Rules:
-  - Base rate: $39 / sqft
+  - Tufted Wool: $30 / sqft
+  - Knotted Wool: $55 / sqft
   - New Zealand Wool or Silk: $49 / sqft
-  - Final price always ends in $9  (e.g. 159, 199, 319 ...)
+  - Other materials: $39 / sqft
+  - Final price always ends in .99
   - Size can be entered as feet  ("5x8 feet", "5x8 ft", "5 x 8")
     or centimetres               ("150x240 cm", "150 x 240 cm")
   - Minimum size: 3x3 ft (9 sqft)
@@ -15,8 +17,14 @@ import re
 
 PREMIUM_MATERIALS = {"new zealand wool", "silk"}
 
-BASE_RATE_PER_SQFT = 39       # USD
-PREMIUM_RATE_PER_SQFT = 49    # USD
+RATE_BY_MATERIAL = {
+    "tufted wool": 30,
+    "knotted wool": 55,
+    "new zealand wool": 49,
+    "silk": 49,
+}
+
+DEFAULT_RATE_PER_SQFT = 39  # USD
 
 
 def _parse_dimensions(size_str: str) -> tuple[float, float, str]:
@@ -82,24 +90,16 @@ def validate_minimum_size(size_str: str) -> None:
         )
 
 
-def _round_to_x9(price: float) -> int:
+def _round_to_x99(price: float) -> float:
     """
-    Round price so it always ends in 9.
-    E.g. 312 → 319,  319 → 319,  320 → 329.
+    Round price so it always ends in .99.
+    E.g. 312.00 → 312.99, 312.40 → 312.99, 312.99 → 312.99.
     """
     floored = math.floor(price)
-    # Find the nearest $X9 >= floored
-    remainder = floored % 10
-    if remainder <= 9:
-        base = floored - remainder
-    else:
-        base = floored - remainder + 10
-
-    candidate = base + 9
+    candidate = floored + 0.99
     if candidate < price:
-        candidate += 10
-
-    return int(candidate)
+        candidate = floored + 10 + 0.99
+    return round(candidate, 2)
 
 
 def calculate_price(size_str: str, material: str) -> dict:
@@ -108,15 +108,16 @@ def calculate_price(size_str: str, material: str) -> dict:
         sqft        – area in square feet (float)
         rate        – rate used per sqft (int)
         raw_price   – sqft * rate before rounding (float)
-        price       – final price ending in $9 (int)
+        price       – final price ending in .99 (float)
         currency    – 'USD'
         is_premium  – bool (True for NZ Wool / Silk)
     """
     sqft = parse_size_to_sqft(size_str)
-    is_premium = material.strip().lower() in PREMIUM_MATERIALS
-    rate = PREMIUM_RATE_PER_SQFT if is_premium else BASE_RATE_PER_SQFT
+    material_key = material.strip().lower()
+    rate = RATE_BY_MATERIAL.get(material_key, DEFAULT_RATE_PER_SQFT)
     raw = sqft * rate
-    price = _round_to_x9(raw)
+    price = _round_to_x99(raw)
+    is_premium = material_key in PREMIUM_MATERIALS
 
     return {
         "sqft": round(sqft, 2),

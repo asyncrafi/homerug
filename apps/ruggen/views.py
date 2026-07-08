@@ -11,11 +11,10 @@ from .models import GeneratedRugImage, GenerationQuota, RugGeneration, RoomPlace
 from .serializers import (
     CheckoutSerializer,
     GenerateRugSerializer,
-    PlaceRugSerializer,
     RoomPlacementSerializer,
     RugGenerationSerializer,
 )
-from .utils.gemini import generate_rug_images, place_rug_in_room
+from .utils.gemini import generate_rug_images
 from .utils.shopify import create_draft_product, get_checkout_url, upload_image_to_shopify
 from .utils.pricing import calculate_price
 
@@ -58,6 +57,8 @@ class RugOptionsView(APIView):
             'materials': [
                 'New Zealand Wool',
                 'Silk',
+                'Tufted Wool',
+                'Knotted Wool',
                 'Wool',
                 'Cotton',
                 'Jute',
@@ -70,11 +71,13 @@ class RugOptionsView(APIView):
             ],
             # Pricing info
             'pricing': {
-                'base_rate_per_sqft': 39,
+                'tufted_rate_per_sqft': 30,
+                'knotted_rate_per_sqft': 55,
                 'premium_rate_per_sqft': 49,
+                'default_rate_per_sqft': 39,
                 'premium_materials': ['New Zealand Wool', 'Silk'],
                 'currency': settings.CURRENCY,
-                'note': 'Price calculated per square foot. Always ends in $9.',
+                'note': 'Price calculated per square foot and rounded up to .99.',
             },
             # Size guidance (free-text input — ft or cm both accepted)
             'size_guidance': {
@@ -189,7 +192,7 @@ class GenerateRugView(APIView):
             'pricing': pricing,
             'generations_used': quota.count,
             'generations_remaining': max(0, MAX_GENERATIONS - quota.count),
-            'next_step': 'POST /api/ruggen/place/ with generation_id + selected_rug_index + room_image_base64',
+            'next_step': 'POST /api/ruggen/checkout/ with generation_id + selected_rug_index',
         }, status=status.HTTP_201_CREATED)
 
 class GenerationDetailView(APIView):
@@ -205,26 +208,119 @@ class GenerationDetailView(APIView):
         return Response(RugGenerationSerializer(generation).data)
 
 
-class PlaceRugInRoomView(APIView):
+# class PlaceRugInRoomView(APIView):
+#    """
+#    POST /api/ruggen/place/
+#
+#    Request body (JSON):
+#    {
+#        "generation_id": "uuid-from-step-1",
+#        "selected_rug_index": 2,
+#        "room_image_base64": "/9j/..."   // or data URI
+#    }
+#    """
+#    def post(self, request):
+#        serializer = PlaceRugSerializer(data=request.data)
+#        if not serializer.is_valid():
+#            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+#
+#        data = serializer.validated_data
+#
+#        try:
+#            generation = RugGeneration.objects.get(id=data['generation_id'])
+#        except RugGeneration.DoesNotExist:
+#            return Response({'error': 'Generation not found'}, status=status.HTTP_404_NOT_FOUND)
+#
+#        if generation.status != 'generated':
+#            return Response(
+#                {'error': f'Generation status is "{generation.status}", must be "generated"'},
+#                status=status.HTTP_400_BAD_REQUEST,
+#            )
+#
+#        try:
+#            rug_img = generation.rug_images.get(index=data['selected_rug_index'])
+#        except GeneratedRugImage.DoesNotExist:
+#            return Response({'error': 'Invalid rug index'}, status=status.HTTP_400_BAD_REQUEST)
+#
+#        placement = RoomPlacement.objects.create(
+#            generation=generation,
+#            selected_rug_index=data['selected_rug_index'],
+#            room_image_base64=data['room_image_base64'],
+#            status='pending',
+#        )
+#
+#        try:
+#            result_b64 = place_rug_in_room(
+#                room_image_b64=data['room_image_base64'],
+#                rug_image_b64=rug_img.base64_data,
+#            )
+#        except Exception as exc:
+#            logger.exception("Room placement failed: %s", exc)
+#            placement.status = 'failed'
+#            placement.error_message = str(exc)
+#            placement.save()
+#            return Response(
+#                {'error': f'Room placement failed: {exc}'},
+#                status=status.HTTP_502_BAD_GATEWAY,
+#            )
+#
+#        placement.result_base64 = result_b64
+#        placement.status = 'placed'
+#        placement.save()
+#
+#        # Calculate price to include in placement response
+#        pricing = calculate_price(generation.size, generation.material)
+#
+#        return Response({
+#            'placement_id': str(placement.id),
+#            'status': 'placed',
+#            'result_base64': result_b64,
+#            'mime_type': 'image/jpeg',
+#            'pricing': pricing,
+#            'next_step': 'POST /api/ruggen/checkout/ with placement_id',
+#        }, status=status.HTTP_201_CREATED)
+#
+
+class CheckoutView(APIView):
     """
-    POST /api/ruggen/place/
+    POST /api/ruggen/checkout/
 
     Request body (JSON):
     {
-        "generation_id": "uuid-from-step-1",
-        "selected_rug_index": 2,
-        "room_image_base64": "/9j/..."   // or data URI
+        "generation_id": "uuid-from-generate-step",
+        "selected_rug_index": 2
+    }
+
+    Optional backwards-compatibility:
+    {
+        "placement_id": "uuid-from-old-placement-step"
     }
     """
     def post(self, request):
-        serializer = PlaceRugSerializer(data=request.data)
+        serializer = CheckoutSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
+        if data.get('placement_id'):
+            try:
+                placement = RoomPlacement.objects.select_related('generation').get(
+                    id=data['placement_id']
+                )
+            except RoomPlacement.DoesNotExist:
+                return Response({'error': 'Placement not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            if placement.status != 'placed':
+                return Response(
+                    {'error': f'Placement status is "{placement.status}", must be "placed"'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return self._checkout_from_placement(placement)
 
         try:
-            generation = RugGeneration.objects.get(id=data['generation_id'])
+            generation = RugGeneration.objects.prefetch_related('rug_images').get(
+                id=data['generation_id']
+            )
         except RugGeneration.DoesNotExist:
             return Response({'error': 'Generation not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -234,81 +330,14 @@ class PlaceRugInRoomView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            rug_img = generation.rug_images.get(index=data['selected_rug_index'])
-        except GeneratedRugImage.DoesNotExist:
-            return Response({'error': 'Invalid rug index'}, status=status.HTTP_400_BAD_REQUEST)
-
-        placement = RoomPlacement.objects.create(
-            generation=generation,
-            selected_rug_index=data['selected_rug_index'],
-            room_image_base64=data['room_image_base64'],
-            status='pending',
+        return self._checkout_from_generation(
+            generation, data['selected_rug_index']
         )
-
-        try:
-            result_b64 = place_rug_in_room(
-                room_image_b64=data['room_image_base64'],
-                rug_image_b64=rug_img.base64_data,
-            )
-        except Exception as exc:
-            logger.exception("Room placement failed: %s", exc)
-            placement.status = 'failed'
-            placement.error_message = str(exc)
-            placement.save()
-            return Response(
-                {'error': f'Room placement failed: {exc}'},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
-
-        placement.result_base64 = result_b64
-        placement.status = 'placed'
-        placement.save()
-
-        # Calculate price to include in placement response
-        pricing = calculate_price(generation.size, generation.material)
-
-        return Response({
-            'placement_id': str(placement.id),
-            'status': 'placed',
-            'result_base64': result_b64,
-            'mime_type': 'image/jpeg',
-            'pricing': pricing,
-            'next_step': 'POST /api/ruggen/checkout/ with placement_id',
-        }, status=status.HTTP_201_CREATED)
-
-
-class CheckoutView(APIView):
-    """
-    POST /api/ruggen/checkout/
-
-    Request body (JSON):
-    {
-        "placement_id": "uuid-from-step-2"
-    }
-    """
-    def post(self, request):
-        serializer = CheckoutSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            placement = RoomPlacement.objects.select_related('generation').get(
-                id=serializer.validated_data['placement_id']
-            )
-        except RoomPlacement.DoesNotExist:
-            return Response({'error': 'Placement not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        if placement.status != 'placed':
-            return Response(
-                {'error': f'Placement status is "{placement.status}", must be "placed"'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+    # Backwards-compatible checkout path if a placement already exists.
+    def _checkout_from_placement(self, placement):
         gen = placement.generation
         pricing = calculate_price(gen.size, gen.material)
 
-        # If no Shopify credentials, return mock for testing
         if not settings.SHOPIFY_ADMIN_API_TOKEN:
             return Response({
                 'checkout_url': 'https://maia-home-goods.myshopify.com/cart/MOCK_VARIANT:1',
@@ -325,7 +354,7 @@ class CheckoutView(APIView):
         )
 
         product = create_draft_product(
-            image_b64=placement.result_base64,  # pass base64 directly
+            image_b64=placement.result_base64,
             style=gen.style,
             size=gen.size,
             material=gen.material,
@@ -337,7 +366,6 @@ class CheckoutView(APIView):
         if product:
             variant_id = product['variants'][0]['id']
             checkout_url = get_checkout_url(variant_id)
-            # grab the image url from the created product
             shopify_url = product.get('images', [{}])[0].get('src', '')
             placement.shopify_product_id = str(product['id'])
             placement.shopify_variant_id = str(variant_id)
@@ -354,6 +382,55 @@ class CheckoutView(APIView):
             'pricing_breakdown': pricing,
         })
 
+    def _checkout_from_generation(self, generation, selected_rug_index):
+        try:
+            rug_img = generation.rug_images.get(index=selected_rug_index)
+        except GeneratedRugImage.DoesNotExist:
+            return Response({'error': 'Invalid rug index'}, status=status.HTTP_400_BAD_REQUEST)
+
+        pricing = calculate_price(generation.size, generation.material)
+
+        if not settings.SHOPIFY_ADMIN_API_TOKEN:
+            return Response({
+                'checkout_url': 'https://maia-home-goods.myshopify.com/cart/MOCK_VARIANT:1',
+                'shopify_image_url': None,
+                'price': pricing['price'],
+                'currency': pricing['currency'],
+                'pricing_breakdown': pricing,
+                'note': 'Shopify credentials not configured — mock response for testing',
+                'generation_id': str(generation.id),
+                'selected_rug_index': selected_rug_index,
+            })
+
+        shopify_url = upload_image_to_shopify(
+            image_b64=rug_img.base64_data,
+            filename=f'maia-rug-{generation.id}-{rug_img.index}.jpg',
+        )
+
+        product = create_draft_product(
+            image_b64=rug_img.base64_data,
+            style=generation.style,
+            size=generation.size,
+            material=generation.material,
+            colors=generation.colors,
+            price=pricing['price'],
+        )
+
+        checkout_url = ''
+        if product:
+            variant_id = product['variants'][0]['id']
+            checkout_url = get_checkout_url(variant_id)
+            shopify_url = product.get('images', [{}])[0].get('src', '')
+
+        return Response({
+            'checkout_url': checkout_url,
+            'shopify_image_url': shopify_url,
+            'price': pricing['price'],
+            'currency': pricing['currency'],
+            'pricing_breakdown': pricing,
+            'generation_id': str(generation.id),
+            'selected_rug_index': selected_rug_index,
+        })
 
 # ── Debug preview views (dev only) ─────────────────────────────────────────
 

@@ -11,6 +11,8 @@ STYLES = [
 MATERIALS = [
     'New Zealand Wool',
     'Silk',
+    'Tufted Wool',
+    'Knotted Wool',
     'Wool',
     'Cotton',
     'Jute',
@@ -61,7 +63,18 @@ class PlaceRugSerializer(serializers.Serializer):
 
 
 class CheckoutSerializer(serializers.Serializer):
-    placement_id = serializers.UUIDField()
+    placement_id = serializers.UUIDField(required=False)
+    generation_id = serializers.UUIDField(required=False)
+    selected_rug_index = serializers.IntegerField(min_value=0, max_value=3, required=False)
+
+    def validate(self, data):
+        if data.get('placement_id'):
+            return data
+        if data.get('generation_id') is not None and data.get('selected_rug_index') is not None:
+            return data
+        raise serializers.ValidationError(
+            'Provide placement_id or generation_id and selected_rug_index.'
+        )
 
 
 class GeneratedRugImageSerializer(serializers.ModelSerializer):
