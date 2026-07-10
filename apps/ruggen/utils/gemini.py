@@ -72,12 +72,13 @@ def build_rug_prompt(style: str, colors: List[str], material: str, size: str, de
     return (
         f"Directly overhead top-down flat lay photograph, camera pointing straight down at 90 degrees, "
         f"NO perspective, NO angle, NO tilt. "
-        f"A {style} style area rug, size {size}, made of {material}. "
+        f"A {style} style area rug ONLY, size {size}, made of {material}. "
         f"Color palette: {colors_str}.{desc} "
-        f"The rug fills the frame on a seamless white background, no bed, furniture, room, props, or people. "
+        f"The rug fills the frame on a seamless white background. "
+        f"IMPORTANT: Do NOT include any humans, people, faces, models, hands, body parts, animals, or pets in the image. "
+        f"Only the rug itself, no bed, furniture, room, props, or living beings of any kind. "
         f"Bird's eye view, flat lay product photography, sharp focus, studio lighting, photorealistic."
     )
-
 
 def generate_rug_images(
     style: str,
