@@ -65,19 +65,16 @@ def _generate_content_with_retry(client, model, contents, config):
 # ─────────────────────────────────────────────
 # STAGE 1 — Rug Design Generation
 # ─────────────────────────────────────────────
-
 def build_rug_prompt(style: str, colors: List[str], material: str, size: str, description: str = '') -> str:
     colors_str = ', '.join(colors) if colors else 'neutral tones'
     desc = f' Design detail: {description}.' if description else ''
     return (
-        f"Directly overhead top-down flat lay photograph, camera pointing straight down at 90 degrees, "
-        f"NO perspective, NO angle, NO tilt. "
-        f"A {style} style area rug ONLY, size {size}, made of {material}. "
+        f"A high-quality e-commerce product photograph of a {style} style area rug, "
+        f"size {size}, made of {material}. "
         f"Color palette: {colors_str}.{desc} "
-        f"The rug fills the frame on a seamless white background. "
-        f"IMPORTANT: Do NOT include any humans, people, faces, models, hands, body parts, animals, or pets in the image. "
-        f"Only the rug itself, no bed, furniture, room, props, or living beings of any kind. "
-        f"Bird's eye view, flat lay product photography, sharp focus, studio lighting, photorealistic."
+        f"Top-down overhead flat lay view, camera directly above, no angle or perspective. "
+        f"Rug only, on a seamless white background, no other objects or subjects in frame. "
+        f"Sharp focus, studio lighting, photorealistic, professional product photography."
     )
 
 def generate_rug_images(
