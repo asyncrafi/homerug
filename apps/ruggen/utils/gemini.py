@@ -90,32 +90,49 @@ def generate_rug_images(
 
     logger.info("Generating %d rug images | style=%s material=%s", num_images, style, material)
 
-    try:
-        response = _generate_images_with_retry(
-            client,
-            settings.GEMINI_IMAGEN_MODEL,
-            prompt,
-            types.GenerateImagesConfig(
-                number_of_images=num_images,
-                aspect_ratio='1:1',
-                output_mime_type='image/jpeg',
-                person_generation='DONT_ALLOW',   # <-- key fix, blocks humans at generation level
-            ),
-        )
-    except genai_errors.ServerError as e:
-        logger.error("Imagen unavailable after retries: %s", e)
-        raise
-
     results = []
-    for img_data in response.generated_images:
-        pil_img = Image.open(BytesIO(img_data.image.image_bytes))
-        watermarked = apply_watermark(pil_img, settings.WATERMARK_TEXT)
+    attempts = 0
+    max_attempts = 4  # safety cap so it can't loop forever
 
-        buf = BytesIO()
-        watermarked.save(buf, 'JPEG', quality=90)
-        b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    while len(results) < num_images and attempts < max_attempts:
+        remaining = num_images - len(results)
+        attempts += 1
 
-        results.append({'base64': b64, 'mime_type': 'image/jpeg'})
+        try:
+            response = _generate_images_with_retry(
+                client,
+                settings.GEMINI_IMAGEN_MODEL,
+                prompt,
+                types.GenerateImagesConfig(
+                    number_of_images=remaining,
+                    aspect_ratio='1:1',
+                    output_mime_type='image/jpeg',
+                    person_generation='DONT_ALLOW',
+                ),
+            )
+        except genai_errors.ServerError as e:
+            logger.error("Imagen unavailable after retries: %s", e)
+            raise
+
+        got = len(response.generated_images)
+        if got < remaining:
+            logger.warning(
+                "Imagen returned %d/%d images (attempt %d/%d), topping up...",
+                got, remaining, attempts, max_attempts
+            )
+
+        for img_data in response.generated_images:
+            pil_img = Image.open(BytesIO(img_data.image.image_bytes))
+            watermarked = apply_watermark(pil_img, settings.WATERMARK_TEXT)
+
+            buf = BytesIO()
+            watermarked.save(buf, 'JPEG', quality=90)
+            b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+
+            results.append({'base64': b64, 'mime_type': 'image/jpeg'})
+
+    if len(results) < num_images:
+        logger.warning("Only got %d/%d rug images after %d attempts", len(results), num_images, max_attempts)
 
     return results
 
