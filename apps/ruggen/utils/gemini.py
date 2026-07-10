@@ -85,10 +85,6 @@ def generate_rug_images(
     description: str = '',
     num_images: int = 4,
 ) -> List[dict]:
-    """
-    Returns list of dicts: [{base64, mime_type}, ...]
-    Each image has Maia Homes watermark applied.
-    """
     client = _client()
     prompt = build_rug_prompt(style, colors, material, size, description)
 
@@ -103,6 +99,7 @@ def generate_rug_images(
                 number_of_images=num_images,
                 aspect_ratio='1:1',
                 output_mime_type='image/jpeg',
+                person_generation='DONT_ALLOW',   # <-- key fix, blocks humans at generation level
             ),
         )
     except genai_errors.ServerError as e:
@@ -121,7 +118,6 @@ def generate_rug_images(
         results.append({'base64': b64, 'mime_type': 'image/jpeg'})
 
     return results
-
 
 # ─────────────────────────────────────────────
 # STAGE 2 — Place Rug in Room
