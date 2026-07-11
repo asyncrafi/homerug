@@ -69,14 +69,11 @@ def build_rug_prompt(style: str, colors: List[str], material: str, size: str, de
     colors_str = ', '.join(colors) if colors else 'neutral tones'
     desc = f' Design detail: {description}.' if description.strip() else ''
     return (
-        f"A high-quality e-commerce product photograph of a {style} style area rug, "
-        f"size {size}, made of {material}. "
-        f"Color palette: {colors_str}.{desc} "
-        f"Top-down overhead flat lay view, camera directly above. "
-        f"Rug only on a seamless white background. No bed, no furniture, no room, no props, no people, "
-        f"no jar, no food, no flowers, no text, no logo, and no unrelated objects. "
-        f"Do not generate any scene or environment. Do not add extra objects or decorations beyond the rug itself. "
-        f"Sharp focus, studio lighting, photorealistic, professional product photography."
+        f"Professional e-commerce product photo of ONLY a {style} style area rug, "
+        f"size {size}, made of {material}, color palette {colors_str}.{desc} "
+        f"The entire image contains nothing but the rug itself, centered, "
+        f"photographed top-down from directly overhead on a plain seamless white background. "
+        f"Sharp focus, even studio lighting, photorealistic."
     )
 
 def generate_rug_images(
@@ -94,7 +91,7 @@ def generate_rug_images(
 
     results = []
     attempts = 0
-    max_attempts = 4  # safety cap so it can't loop forever
+    max_attempts = 4
 
     while len(results) < num_images and attempts < max_attempts:
         remaining = num_images - len(results)
@@ -109,6 +106,7 @@ def generate_rug_images(
                     number_of_images=remaining,
                     aspect_ratio='1:1',
                     output_mime_type='image/jpeg',
+                    person_generation='DONT_ALLOW',   # <-- restored, this was missing
                 ),
             )
         except genai_errors.ServerError as e:
@@ -117,7 +115,7 @@ def generate_rug_images(
 
         generated_images = getattr(response, 'generated_images', None)
         if not generated_images:
-            logger.error("Gemini returned no images. response=%r", response)
+            logger.error("Gemini returned no images (likely RAI-filtered). response=%r", response)
             if attempts >= max_attempts:
                 raise ValueError("Gemini returned no images after retries")
             continue
