@@ -72,8 +72,9 @@ def build_rug_prompt(style: str, colors: List[str], material: str, size: str, de
         f"A high-quality e-commerce product photograph of a {style} style area rug, "
         f"size {size}, made of {material}. "
         f"Color palette: {colors_str}.{desc} "
-        f"Top-down overhead flat lay view, camera directly above, no angle or perspective. "
-        f"Rug only, on a seamless white background, no other objects or subjects in frame. "
+        f"Top-down overhead flat lay view, camera directly above. "
+        f"Rug only on a seamless white background. No bed, no furniture, no room, no props, no people, "
+        f"no jar, no food, no text, no logo, and no unrelated objects. "
         f"Sharp focus, studio lighting, photorealistic, professional product photography."
     )
 
