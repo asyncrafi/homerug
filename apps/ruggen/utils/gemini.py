@@ -67,14 +67,15 @@ def _generate_content_with_retry(client, model, contents, config):
 # ─────────────────────────────────────────────
 def build_rug_prompt(style: str, colors: List[str], material: str, size: str, description: str = '') -> str:
     colors_str = ', '.join(colors) if colors else 'neutral tones'
-    desc = f' Design detail: {description}.' if description else ''
+    desc = f' Design detail: {description}.' if description.strip() else ''
     return (
         f"A high-quality e-commerce product photograph of a {style} style area rug, "
         f"size {size}, made of {material}. "
         f"Color palette: {colors_str}.{desc} "
         f"Top-down overhead flat lay view, camera directly above. "
         f"Rug only on a seamless white background. No bed, no furniture, no room, no props, no people, "
-        f"no jar, no food, no text, no logo, and no unrelated objects. "
+        f"no jar, no food, no flowers, no text, no logo, and no unrelated objects. "
+        f"Do not generate any scene or environment. Do not add extra objects or decorations beyond the rug itself. "
         f"Sharp focus, studio lighting, photorealistic, professional product photography."
     )
 
@@ -108,21 +109,27 @@ def generate_rug_images(
                     number_of_images=remaining,
                     aspect_ratio='1:1',
                     output_mime_type='image/jpeg',
-                    person_generation='DONT_ALLOW',
                 ),
             )
         except genai_errors.ServerError as e:
             logger.error("Imagen unavailable after retries: %s", e)
             raise
 
-        got = len(response.generated_images)
+        generated_images = getattr(response, 'generated_images', None)
+        if not generated_images:
+            logger.error("Gemini returned no images. response=%r", response)
+            if attempts >= max_attempts:
+                raise ValueError("Gemini returned no images after retries")
+            continue
+
+        got = len(generated_images)
         if got < remaining:
             logger.warning(
                 "Imagen returned %d/%d images (attempt %d/%d), topping up...",
                 got, remaining, attempts, max_attempts
             )
 
-        for img_data in response.generated_images:
+        for img_data in generated_images:
             pil_img = Image.open(BytesIO(img_data.image.image_bytes))
             watermarked = apply_watermark(pil_img, settings.WATERMARK_TEXT)
 
