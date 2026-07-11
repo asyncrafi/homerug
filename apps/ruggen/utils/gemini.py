@@ -69,11 +69,13 @@ def build_rug_prompt(style: str, colors: List[str], material: str, size: str, de
     colors_str = ', '.join(colors) if colors else 'neutral tones'
     desc = f' Design detail: {description}.' if description.strip() else ''
     return (
-        f"Professional e-commerce product photo of ONLY a {style} style area rug, "
-        f"size {size}, made of {material}, color palette {colors_str}.{desc} "
-        f"The entire image contains nothing but the rug itself, centered, "
-        f"photographed top-down from directly overhead on a plain seamless white background. "
-        f"Sharp focus, even studio lighting, photorealistic."
+        f"A large rectangular {style} style area rug, size {size}, made of {material}, "
+        f"lying completely flat and fully unfolded on the floor, photographed from directly overhead "
+        f"at a 90-degree bird's eye angle. Color palette: {colors_str}.{desc} "
+        f"The rug is rectangular, flat, and fills most of the frame, edge to edge, showing its full pattern. "
+        f"Plain seamless white background. No camera equipment, no tripods, no stands, no studio gear visible. "
+        f"No bags, pouches, wallets, cushions, or rolled/folded textiles — this is a full-size flat floor rug only. "
+        f"No people, no furniture, no room, no props. Clean e-commerce catalog photo, sharp focus, even lighting."
     )
 
 def generate_rug_images(
