@@ -1,17 +1,29 @@
 """
 utils/gemini.py
 
-Stage 1 — generate_rug_images()
-    Gemini Imagen 3 → generates 4 rug product images from style/color/material params.
+generate_rug_images()
+    Gemini 3.1 Flash Image ("Nano Banana 2") -> generates rug product images from
+    style/color/material params.
 
-Stage 2 — place_rug_in_room()
-    Gemini 2.0 Flash (vision + image editing) → takes room photo + rug image,
-    composites the rug into the room realistically.
+    Imagen 4 is deprecated and shuts down 2026-08-17, so generation now goes through
+    client.models.generate_content() instead of client.models.generate_images().
+
+    Gemini image models reject candidate_count > 1, so we can't ask for N images in
+    one call -- each call returns exactly one image, and we loop until we have
+    `num_images` images that pass QC.
+
+    QC validation (_validate_rug_image) rejects anything that isn't a clean top-down
+    flat-lay rug on a white background before it's watermarked or counted toward the
+    result -- this is what stops off-topic generations (angled room shots, unrelated
+    objects) from ever reaching a client.
+
+Room-placement stage has been removed. This module now only does generation.
 """
 import base64
+import json
 import logging
 from io import BytesIO
-from typing import List
+from typing import List, Tuple
 
 from django.conf import settings
 from google import genai
@@ -43,17 +55,6 @@ RETRYABLE_ERRORS = (genai_errors.ServerError,)
     retry=retry_if_exception_type(RETRYABLE_ERRORS),
     before_sleep=before_sleep_log(logger, logging.WARNING),
 )
-def _generate_images_with_retry(client, model, prompt, config):
-    return client.models.generate_images(model=model, prompt=prompt, config=config)
-
-
-@retry(
-    reraise=True,
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=2, min=2, max=30),
-    retry=retry_if_exception_type(RETRYABLE_ERRORS),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-)
 def _generate_content_with_retry(client, model, contents, config):
     return client.models.generate_content(
         model=model,
@@ -63,7 +64,54 @@ def _generate_content_with_retry(client, model, contents, config):
 
 
 # ─────────────────────────────────────────────
-# STAGE 1 — Rug Design Generation
+# QC validation — runs on every raw image before it's ever watermarked
+# or shown to a user. Rejects anything that isn't a top-down flat rug.
+# ─────────────────────────────────────────────
+
+RUG_VALIDATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "is_valid": {"type": "boolean"},
+        "reason": {"type": "string"},
+    },
+    "required": ["is_valid", "reason"],
+}
+
+
+def _validate_rug_image(client, image_bytes: bytes) -> Tuple[bool, str]:
+    """Reject anything that isn't a single top-down flat-lay rug on white background."""
+    prompt = (
+        "Look at this image. Answer strictly: is this a single rectangular "
+        "area rug, photographed from directly overhead (bird's eye, ~90 degrees), "
+        "lying flat, on a plain white/seamless background, with no room, no "
+        "furniture, no people, and no unrelated objects (fruit, animals, etc)? "
+        "It must fill most of the frame and show a clear rug pattern. "
+        "If it shows any angle other than top-down, any room context, or "
+        "anything that isn't a rug, is_valid must be false."
+    )
+    try:
+        response = _generate_content_with_retry(
+            client,
+            settings.GEMINI_VALIDATION_MODEL,
+            [types.Content(role='user', parts=[
+                types.Part.from_bytes(data=image_bytes, mime_type='image/jpeg'),
+                types.Part.from_text(text=prompt),
+            ])],
+            types.GenerateContentConfig(
+                response_mime_type='application/json',
+                response_schema=RUG_VALIDATION_SCHEMA,
+            ),
+        )
+        result = json.loads(response.text)
+        return bool(result['is_valid']), result.get('reason', '')
+    except Exception as e:
+        # If the validator itself fails, don't let a bad image slip through silently
+        logger.warning("Rug validation call failed, rejecting image: %s", e)
+        return False, 'validation_error'
+
+
+# ─────────────────────────────────────────────
+# Rug Design Generation
 # ─────────────────────────────────────────────
 def build_rug_prompt(style: str, colors: List[str], material: str, size: str, description: str = '') -> str:
     colors_str = ', '.join(colors) if colors else 'neutral tones'
@@ -77,6 +125,34 @@ def build_rug_prompt(style: str, colors: List[str], material: str, size: str, de
         f"No bags, pouches, wallets, cushions, or rolled/folded textiles — this is a full-size flat floor rug only. "
         f"No people, no furniture, no room, no props. Clean e-commerce catalog photo, sharp focus, even lighting."
     )
+
+
+def _generate_single_rug_image(client, prompt: str) -> bytes:
+    """
+    One API call = one image. Gemini image models (2.5 and 3.x) reject
+    candidate_count > 1 with a 400 error, so batching happens by looping
+    this call, not by asking for more candidates in one request.
+    """
+    response = _generate_content_with_retry(
+        client,
+        settings.GEMINI_IMAGEN_MODEL,
+        [types.Content(role='user', parts=[types.Part.from_text(text=prompt)])],
+        types.GenerateContentConfig(
+            response_modalities=['IMAGE'],
+            image_config=types.ImageConfig(aspect_ratio='1:1'),
+        ),
+    )
+
+    candidates = getattr(response, 'candidates', None)
+    if not candidates:
+        raise ValueError("No candidates returned (likely RAI-filtered)")
+
+    for part in candidates[0].content.parts:
+        if part.inline_data is not None:
+            return part.inline_data.data
+
+    raise ValueError("Model returned no image data")
+
 
 def generate_rug_images(
     style: str,
@@ -93,121 +169,40 @@ def generate_rug_images(
 
     results = []
     attempts = 0
-    max_attempts = 4
+    # Generous budget: QC rejection means some attempts won't count, so allow
+    # more attempts than images needed rather than failing the whole batch.
+    max_attempts = num_images * 3
 
     while len(results) < num_images and attempts < max_attempts:
-        remaining = num_images - len(results)
         attempts += 1
 
         try:
-            response = _generate_images_with_retry(
-                client,
-                settings.GEMINI_IMAGEN_MODEL,
-                prompt,
-                types.GenerateImagesConfig(
-                    number_of_images=remaining,
-                    aspect_ratio='1:1',
-                    output_mime_type='image/jpeg',
-                    person_generation='DONT_ALLOW',   # <-- restored, this was missing
-                ),
-            )
+            raw_bytes = _generate_single_rug_image(client, prompt)
         except genai_errors.ServerError as e:
-            logger.error("Imagen unavailable after retries: %s", e)
+            logger.error("Nano Banana unavailable after retries: %s", e)
             raise
-
-        generated_images = getattr(response, 'generated_images', None)
-        if not generated_images:
-            logger.error("Gemini returned no images (likely RAI-filtered). response=%r", response)
-            if attempts >= max_attempts:
-                raise ValueError("Gemini returned no images after retries")
+        except ValueError as e:
+            logger.warning("Attempt %d/%d produced no usable image: %s", attempts, max_attempts, e)
             continue
 
-        got = len(generated_images)
-        if got < remaining:
-            logger.warning(
-                "Imagen returned %d/%d images (attempt %d/%d), topping up...",
-                got, remaining, attempts, max_attempts
-            )
+        is_valid, reason = _validate_rug_image(client, raw_bytes)
+        if not is_valid:
+            logger.warning("Rejected non-rug image on attempt %d/%d: %s", attempts, max_attempts, reason)
+            continue
 
-        for img_data in generated_images:
-            pil_img = Image.open(BytesIO(img_data.image.image_bytes))
-            watermarked = apply_watermark(pil_img, settings.WATERMARK_TEXT)
+        pil_img = Image.open(BytesIO(raw_bytes))
+        watermarked = apply_watermark(pil_img, settings.WATERMARK_TEXT)
 
-            buf = BytesIO()
-            watermarked.save(buf, 'JPEG', quality=90)
-            b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        buf = BytesIO()
+        watermarked.save(buf, 'JPEG', quality=90)
+        b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
 
-            results.append({'base64': b64, 'mime_type': 'image/jpeg'})
+        results.append({'base64': b64, 'mime_type': 'image/jpeg'})
 
     if len(results) < num_images:
-        logger.warning("Only got %d/%d rug images after %d attempts", len(results), num_images, max_attempts)
+        logger.warning(
+            "Only got %d/%d valid rug images after %d attempts",
+            len(results), num_images, attempts,
+        )
 
     return results
-
-# ─────────────────────────────────────────────
-# STAGE 2 — Place Rug in Room
-# ─────────────────────────────────────────────
-
-def place_rug_in_room(room_image_b64: str, rug_image_b64: str) -> str:
-    """
-    Takes room photo + rug image (both base64).
-    Uses Gemini 2.0 Flash multimodal to composite the rug into the room.
-    Returns base64 of the result image.
-    """
-    client = _client()
-
-    room_bytes = base64.b64decode(room_image_b64)
-    rug_bytes = base64.b64decode(rug_image_b64)
-
-    prompt = (
-        "You are an interior design visualization AI. "
-        "I have provided two images:\n"
-        "1. A room photo (the user's actual room)\n"
-        "2. A rug product photo (flat lay on white background)\n\n"
-        "Your task: Generate a new image that shows the room with the rug naturally placed on the floor. "
-        "The rug should:\n"
-        "- Be positioned realistically on the floor in the center/main area\n"
-        "- Match the perspective and angle of the room photo\n"
-        "- Have realistic shadows and lighting that match the room\n"
-        "- Look like the rug is actually in the room, not photoshopped\n"
-        "- Maintain the rug's colors, pattern, and design accurately\n"
-        "Output only the final room image with the rug placed in it."
-    )
-
-    room_part = types.Part.from_bytes(data=room_bytes, mime_type='image/jpeg')
-    rug_part = types.Part.from_bytes(data=rug_bytes, mime_type='image/jpeg')
-
-    logger.info("Placing rug in room via Gemini vision...")
-
-    try:
-        response = _generate_content_with_retry(
-            client,
-            settings.GEMINI_VISION_MODEL,
-            [
-                types.Content(
-                    role='user',
-                    parts=[
-                        types.Part.from_text(text="Room photo:"),
-                        room_part,
-                        types.Part.from_text(text="Rug to place in the room:"),
-                        rug_part,
-                        types.Part.from_text(text=prompt),
-                    ],
-                )
-            ],
-            types.GenerateContentConfig(
-                response_modalities=['IMAGE', 'TEXT'],
-            ),
-        )
-    except genai_errors.ServerError as e:
-        logger.error("Room placement unavailable after retries: %s", e)
-        raise
-
-    # Extract image from response
-    for part in response.candidates[0].content.parts:
-        if part.inline_data is not None:
-            result_b64 = base64.b64encode(part.inline_data.data).decode('utf-8')
-            logger.info("Room placement image generated successfully")
-            return result_b64
-
-    raise ValueError("Gemini did not return an image for room placement. Try gemini-2.0-flash-preview-image-generation model.")

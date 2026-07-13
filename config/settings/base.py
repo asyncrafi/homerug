@@ -259,3 +259,5 @@ from corsheaders.defaults import default_headers
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "ngrok-skip-browser-warning",
 ]
+
+GEMINI_VALIDATION_MODEL = os.environ.get('GEMINI_VALIDATION_MODEL', 'gemini-2.5-flash')
