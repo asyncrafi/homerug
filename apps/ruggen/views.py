@@ -14,7 +14,7 @@ from .serializers import (
     RoomPlacementSerializer,
     RugGenerationSerializer,
 )
-from .utils.gemini import generate_rug_images
+from .tasks import generate_rug_images_task
 from .utils.shopify import create_draft_product, get_checkout_url, upload_image_to_shopify
 from .utils.pricing import calculate_price
 
@@ -133,6 +133,7 @@ class GenerateRugView(APIView):
         pricing = calculate_price(data['size'], data['material'])
 
         generation = RugGeneration.objects.create(
+            email=email,
             style=data['style'],
             size=data['size'],
             material=data['material'],
@@ -141,47 +142,21 @@ class GenerateRugView(APIView):
             status='pending',
         )
 
-        try:
-            images = generate_rug_images(
-                style=data['style'],
-                colors=data['colors'],
-                material=data['material'],
-                size=data['size'],
-                description=data.get('description', ''),
-                num_images=4,
-            )
-        except Exception as exc:
-            logger.exception("Rug generation failed: %s", exc)
-            generation.status = 'failed'
-            generation.error_message = str(exc)
-            generation.save()
-            return Response(
-                {'error': f'Image generation failed: {exc}'},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+        generate_rug_images_task.delay(
+            str(generation.id),
+            style=data['style'],
+            colors=data['colors'],
+            material=data['material'],
+            size=data['size'],
+            description=data.get('description', ''),
+        )
 
-        for i, img in enumerate(images):
-            GeneratedRugImage.objects.create(
-                generation=generation,
-                index=i,
-                base64_data=img['base64'],
-                mime_type=img['mime_type'],
-            )
-
-        generation.status = 'generated'
-        generation.save()
-
-        quota.count = F('count') + 1
-        quota.save(update_fields=['count'])
-        quota.refresh_from_db()
+        generations_used = _increment_generation_count(request)
 
         return Response({
             'generation_id': str(generation.id),
-            'status': 'generated',
-            'images': [
-                {'index': img.index, 'base64_data': img.base64_data, 'mime_type': img.mime_type}
-                for img in generation.rug_images.all()
-            ],
+            'status': 'pending',
+            'poll_url': f'/api/ruggen/{generation.id}/',
             'params': {
                 'style': generation.style,
                 'size': generation.size,
@@ -190,10 +165,9 @@ class GenerateRugView(APIView):
                 'description': generation.description,
             },
             'pricing': pricing,
-            'generations_used': quota.count,
-            'generations_remaining': max(0, MAX_GENERATIONS - quota.count),
-            'next_step': 'POST /api/ruggen/checkout/ with generation_id + selected_rug_index',
-        }, status=status.HTTP_201_CREATED)
+            'generations_used': generations_used,
+            'generations_remaining': max(0, MAX_GENERATIONS - generations_used),
+        }, status=status.HTTP_202_ACCEPTED)
 
 class GenerationDetailView(APIView):
     """

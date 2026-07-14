@@ -8,6 +8,8 @@ class RugGeneration(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    email = models.EmailField()
+
     # User params
     style = models.CharField(max_length=100)
     size = models.CharField(max_length=50)
