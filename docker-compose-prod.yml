@@ -14,7 +14,7 @@ services:
       - db
       - redis
     restart: unless-stopped
-    command: uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn config.asgi:application --host 0.0.0.0 --port 8000
 
   celery:
     build: .
