@@ -8,7 +8,7 @@ class RugGeneration(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    email = models.EmailField()
+    email = models.EmailField(blank=True, null=True)  # Optional for logged-in users, required for anonymous users
 
     # User params
     style = models.CharField(max_length=100)
@@ -79,7 +79,7 @@ class RoomPlacement(models.Model):
     
 
 class GenerationQuota(models.Model):
-    email = models.EmailField(unique=True)
+    email = models.EmailField(unique=True, blank=True, null=True)
     count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     last_used = models.DateTimeField(auto_now=True)
