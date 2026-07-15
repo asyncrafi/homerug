@@ -29,7 +29,7 @@ def create_draft_product(image_b64: str, style: str, size: str, material: str, c
         'product': {
             'title': f"Custom AI Rug — {style} | {size} | {material}",
             'body_html': f"<p>AI-generated custom rug. Style: {style}, Size: {size}, Material: {material}, Colors: {', '.join(colors)}</p>",
-            'vendor': 'Maia Homes',
+            'vendor': '1001 Knots',
             'product_type': 'Rug',
             'status': 'active',
             'variants': [{'price': str(price), 'requires_shipping': True}],

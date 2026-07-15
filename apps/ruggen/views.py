@@ -49,21 +49,26 @@ class RugOptionsView(APIView):
     No auth needed. Returns all options + pricing info for the frontend.
     """
     def get(self, request):
+        email = request.query_params.get('email')
+        if email:
+            quota = GenerationQuota.objects.filter(email=email).first()
+            used = quota.count if quota else 0
+        else:
+            used = _get_generation_count(request)
+
         return Response({
             'styles': [
                 'Persian', 'Moroccan', 'Bohemian', 'Modern', 'Geometric',
                 'Scandinavian', 'Traditional', 'Contemporary', 'Tribal', 'Abstract',
             ],
             'materials': [
-                'New Zealand Wool',
-                'Silk',
-                'Tufted Wool',
-                'Knotted Wool',
-                'Wool',
-                'Cotton',
+                'Moroccan Shaggy Wool',
+                'Hand Tufted New Zealand Wool',
+                'Hand-Knotted New Zealand Wool',
+                'Hand-Knotted Silk',
+                'Cotton (Dhurrie)',
                 'Jute',
-                'Synthetic',
-                'Bamboo',
+                'Printed Synthetic',
             ],
             'suggested_colors': [
                 'navy blue', 'cream', 'terracotta', 'forest green', 'burgundy',
@@ -71,29 +76,24 @@ class RugOptionsView(APIView):
             ],
             # Pricing info
             'pricing': {
-                'tufted_rate_per_sqft': 30,
-                'knotted_rate_per_sqft': 55,
-                'premium_rate_per_sqft': 49,
-                'default_rate_per_sqft': 39,
-                'premium_materials': ['New Zealand Wool', 'Silk'],
                 'currency': settings.CURRENCY,
                 'note': 'Price calculated per square foot and rounded up to .99.',
             },
             # Size guidance (free-text input — ft or cm both accepted)
             'size_guidance': {
-                'minimum': '3x3 feet (91x91 cm)',
+                'minimum': '2x2 feet (61x61 cm)',
                 'unit_options': ['feet', 'ft', 'cm'],
                 'examples': [
-                    '3x5 feet', '4x6 feet', '5x8 feet',
+                    '2x6 feet', '3x5 feet', '4x6 feet', '5x8 feet',
                     '6x9 feet', '8x10 feet', '9x12 feet',
-                    '90x150 cm', '120x180 cm', '150x240 cm',
+                    '60x180 cm', '90x150 cm', '150x240 cm',
                 ],
                 'hint': 'You can type any custom size, e.g. "7x11 feet" or "200x300 cm"',
             },
             'images_per_generation': 4,
             'max_generations': MAX_GENERATIONS,
-            'generations_used': _get_generation_count(request),
-            'generations_remaining': max(0, MAX_GENERATIONS - _get_generation_count(request)),
+            'generations_used': used,
+            'generations_remaining': max(0, MAX_GENERATIONS - used),
         })
 
 

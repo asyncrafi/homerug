@@ -9,24 +9,21 @@ STYLES = [
 
 # Materials now include premium options
 MATERIALS = [
-    'New Zealand Wool',
-    'Silk',
-    'Tufted Wool',
-    'Knotted Wool',
-    'Wool',
-    'Cotton',
+    'Moroccan Shaggy Wool',
+    'Hand Tufted New Zealand Wool',
+    'Hand-Knotted New Zealand Wool',
+    'Hand-Knotted Silk',
+    'Cotton (Dhurrie)',
     'Jute',
-    'Synthetic',
-    'Bamboo',
+    'Printed Synthetic',
 ]
-
 class GenerateRugSerializer(serializers.Serializer):
     style = serializers.ChoiceField(choices=STYLES)
 
     # Free-text size — accepts "5x8 feet", "5x8 ft", "150x240 cm", etc.
     size = serializers.CharField(
         max_length=50,
-        help_text='e.g. "5x8 feet" or "150x240 cm". Minimum 3x3 ft.',
+        help_text='e.g. "5x8 feet" or "150x240 cm". Minimum 2x2 ft.',
     )
 
     material = serializers.ChoiceField(choices=MATERIALS)

@@ -15,16 +15,19 @@ Rules:
 import math
 import re
 
-PREMIUM_MATERIALS = {"new zealand wool", "silk"}
+PREMIUM_MATERIALS = set()  # no longer used — every material has its own flat rate now
 
 RATE_BY_MATERIAL = {
-    "tufted wool": 30,
-    "knotted wool": 55,
-    "new zealand wool": 49,
-    "silk": 49,
+    "moroccan shaggy wool": 30,
+    "hand tufted new zealand wool": 30,
+    "hand-knotted new zealand wool": 55,
+    "hand-knotted silk": 85,
+    "cotton (dhurrie)": 30,
+    "jute": 25,
+    "printed synthetic": 15,
 }
 
-DEFAULT_RATE_PER_SQFT = 39  # USD
+DEFAULT_RATE_PER_SQFT = 30  # fallback only, shouldn't normally be hit now that every material has an explicit rate
 
 
 def _parse_dimensions(size_str: str) -> tuple[float, float, str]:
@@ -72,20 +75,20 @@ def parse_size_to_sqft(size_str: str) -> float:
 
 def validate_minimum_size(size_str: str) -> None:
     """
-    Raise ValueError if either dimension is under 3 ft (or 91.44 cm).
+    Raise ValueError if either dimension is under 2 ft (or 61 cm).
     """
     d1, d2, unit = _parse_dimensions(size_str)
 
     if unit == "cm":
-        min_dim = 91.0    # ~3 ft (91.44 cm exactly, we round down to be lenient)
+        min_dim = 61.0    # ~2 ft (60.96 cm exactly, rounded down to be lenient)
         unit_label = "cm"
     else:
-        min_dim = 3.0
+        min_dim = 2.0
         unit_label = "ft"
 
     if d1 < min_dim or d2 < min_dim:
         raise ValueError(
-            f"Minimum rug size is 3x3 ft (91x91 cm). "
+            f"Minimum rug size is 2x2 ft (61x61 cm). "
             f"Got {d1:.0f}x{d2:.0f} {unit_label}."
         )
 
@@ -103,21 +106,11 @@ def _round_to_x99(price: float) -> float:
 
 
 def calculate_price(size_str: str, material: str) -> dict:
-    """
-    Return a dict with:
-        sqft        – area in square feet (float)
-        rate        – rate used per sqft (int)
-        raw_price   – sqft * rate before rounding (float)
-        price       – final price ending in .99 (float)
-        currency    – 'USD'
-        is_premium  – bool (True for NZ Wool / Silk)
-    """
     sqft = parse_size_to_sqft(size_str)
     material_key = material.strip().lower()
     rate = RATE_BY_MATERIAL.get(material_key, DEFAULT_RATE_PER_SQFT)
     raw = sqft * rate
     price = _round_to_x99(raw)
-    is_premium = material_key in PREMIUM_MATERIALS
 
     return {
         "sqft": round(sqft, 2),
@@ -125,5 +118,4 @@ def calculate_price(size_str: str, material: str) -> dict:
         "raw_price": round(raw, 2),
         "price": price,
         "currency": "USD",
-        "is_premium": is_premium,
     }
