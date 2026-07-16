@@ -21,7 +21,11 @@ from .utils.pricing import calculate_price
 logger = logging.getLogger(__name__)
 
 # Max AI generations allowed per session/IP
-MAX_GENERATIONS = 3
+MAX_GENERATIONS = 5
+EXEMPT_EMAILS = {
+    'sivmey.hok@gmail.com',
+    'info@maiahomes.com',
+}
 GENERATION_LIMIT_KEY = 'rug_generation_count'
 
 BLOCKED_MESSAGE = (
@@ -33,6 +37,11 @@ BLOCKED_MESSAGE = (
 def _get_generation_count(request) -> int:
     """Return how many generations this session has used."""
     return request.session.get(GENERATION_LIMIT_KEY, 0)
+
+
+def _is_exempt_email(email: str) -> bool:
+    """Return True for emails that are exempt from generation limits."""
+    return email.strip().lower() in EXEMPT_EMAILS
 
 
 def _increment_generation_count(request) -> int:
@@ -53,8 +62,16 @@ class RugOptionsView(APIView):
         if email:
             quota = GenerationQuota.objects.filter(email=email).first()
             used = quota.count if quota else 0
+            if _is_exempt_email(email):
+                max_generations = None
+                generations_remaining = None
+            else:
+                max_generations = MAX_GENERATIONS
+                generations_remaining = max(0, MAX_GENERATIONS - used)
         else:
             used = _get_generation_count(request)
+            max_generations = MAX_GENERATIONS
+            generations_remaining = max(0, MAX_GENERATIONS - used)
 
         return Response({
             'styles': [
@@ -91,9 +108,9 @@ class RugOptionsView(APIView):
                 'hint': 'You can type any custom size, e.g. "7x11 feet" or "200x300 cm"',
             },
             'images_per_generation': 4,
-            'max_generations': MAX_GENERATIONS,
+            'max_generations': max_generations,
             'generations_used': used,
-            'generations_remaining': max(0, MAX_GENERATIONS - used),
+            'generations_remaining': generations_remaining,
         })
 
 
@@ -120,7 +137,7 @@ class GenerateRugView(APIView):
         email = data['email']
 
         quota, _ = GenerationQuota.objects.get_or_create(email=email)
-        if quota.count >= MAX_GENERATIONS:
+        if not _is_exempt_email(email) and quota.count >= MAX_GENERATIONS:
             return Response(
                 {
                     'error': 'generation_limit_reached',
