@@ -42,11 +42,18 @@ class GenerateRugSerializer(serializers.Serializer):
     description = serializers.CharField(max_length=500, required=False, default='', allow_blank=True)
 
     def validate_size(self, value):
-        try:
-            validate_minimum_size(value)
-        except ValueError as e:
-            raise serializers.ValidationError(str(e))
+        # Basic check — full validation in validate() where we have shape
+        if not value or not value.strip():
+            raise serializers.ValidationError('Size cannot be empty.')
         return value
+
+    def validate(self, data):
+        # Now we have all fields including shape
+        try:
+            validate_minimum_size(data['size'], shape=data.get('shape', 'rectangular'))
+        except ValueError as e:
+            raise serializers.ValidationError({'size': str(e)})
+        return data
 
 
 class PlaceRugSerializer(serializers.Serializer):
