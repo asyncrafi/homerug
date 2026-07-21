@@ -3,13 +3,23 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.ruggen.models import GeneratedRugImage, RugGeneration
-from apps.ruggen.utils.gemini import get_aspect_ratio_for_size
+from apps.ruggen.utils.gemini import build_validation_prompt, get_aspect_ratio_for_size
 
 
 class RugGenerationUtilityTests(TestCase):
     def test_get_aspect_ratio_for_size_uses_ratio(self):
         self.assertEqual(get_aspect_ratio_for_size('2.5x6 ft'), '5:12')
         self.assertEqual(get_aspect_ratio_for_size('5x8 ft'), '5:8')
+
+    def test_validation_prompt_is_shape_aware(self):
+        from apps.ruggen.utils.gemini import build_validation_prompt
+
+        round_prompt = build_validation_prompt(shape='round')
+        rectangular_prompt = build_validation_prompt(shape='rectangular')
+
+        self.assertIn('round', round_prompt.lower())
+        self.assertIn('rectangular', rectangular_prompt.lower())
+        self.assertNotIn('rectangular', round_prompt.lower())
 
 
 class RugGenerationApiTests(TestCase):

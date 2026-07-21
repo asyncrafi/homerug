@@ -79,17 +79,24 @@ RUG_VALIDATION_SCHEMA = {
 }
 
 
-def _validate_rug_image(client, image_bytes: bytes) -> Tuple[bool, str]:
-    """Reject anything that isn't a single top-down flat-lay rug on white background."""
+def build_validation_prompt(shape: str = 'rectangular') -> str:
+    """Build a shape-aware validation prompt for the QC model."""
+    shape_label = 'round' if shape == 'round' else 'rectangular'
     prompt = (
-        "Look at this image. Answer strictly: is this a single rectangular "
-        "area rug, photographed from directly overhead (bird's eye, ~90 degrees), "
+        f"Look at this image. Answer strictly: is this a single {shape_label} "
+        f"area rug, photographed from directly overhead (bird's eye, ~90 degrees), "
         "lying flat, on a plain white/seamless background, with no room, no "
         "furniture, no people, and no unrelated objects (fruit, animals, etc)? "
         "It must fill most of the frame and show a clear rug pattern. "
         "If it shows any angle other than top-down, any room context, or "
         "anything that isn't a rug, is_valid must be false."
     )
+    return prompt
+
+
+def _validate_rug_image(client, image_bytes: bytes, shape: str = 'rectangular') -> Tuple[bool, str]:
+    """Reject anything that isn't a single top-down flat-lay rug on white background."""
+    prompt = build_validation_prompt(shape=shape)
     try:
         response = _generate_content_with_retry(
             client,
@@ -227,7 +234,7 @@ def generate_rug_images(
             logger.warning("Attempt %d/%d produced no usable image: %s", attempts, max_attempts, e)
             continue
 
-        is_valid, reason = _validate_rug_image(client, raw_bytes)
+        is_valid, reason = _validate_rug_image(client, raw_bytes, shape=shape)
         if not is_valid:
             logger.warning("Rejected non-rug image on attempt %d/%d: %s", attempts, max_attempts, reason)
             continue

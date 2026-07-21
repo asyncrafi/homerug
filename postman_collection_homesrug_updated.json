@@ -80,7 +80,17 @@
       "request": {
         "method": "GET",
         "header": [],
-        "url": "{{base_url}}/api/ruggen/favorites/"
+        "url": "{{base_url}}/api/ruggen/favorites/?email=user@example.com",
+        "description": "Requires email query param to scope favorites to the correct user"
+      }
+    },
+    {
+      "name": "Get Generation History",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/ruggen/history/?email=user@example.com",
+        "description": "Returns recent generations and the latest generation for the given email"
       }
     },
     {
