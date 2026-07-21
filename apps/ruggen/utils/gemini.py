@@ -22,7 +22,6 @@ Room-placement stage has been removed. This module now only does generation.
 import base64
 import json
 import logging
-import math
 import re
 from io import BytesIO
 from typing import List, Tuple
@@ -115,8 +114,26 @@ def _validate_rug_image(client, image_bytes: bytes) -> Tuple[bool, str]:
 # ─────────────────────────────────────────────
 # Rug Design Generation
 # ─────────────────────────────────────────────
+SUPPORTED_ASPECT_RATIOS = {
+    '1:1': 1.0,
+    '4:5': 0.8,
+    '5:4': 1.25,
+    '3:4': 0.75,
+    '4:3': 4 / 3,
+    '2:3': 2 / 3,
+    '3:2': 1.5,
+    '9:16': 9 / 16,
+    '16:9': 16 / 9,
+    '21:9': 21 / 9,
+    '1:4': 0.25,
+    '4:1': 4.0,
+    '1:8': 0.125,
+    '8:1': 8.0,
+}
+
+
 def get_aspect_ratio_for_size(size: str) -> str:
-    """Convert a size like '2.5x6 ft' into a Gemini-friendly aspect ratio string."""
+    """Convert a size like '2.5x6 ft' into the closest Gemini-supported aspect ratio."""
     nums = re.findall(r"[\d]+(?:\.[\d]+)?", size)
     if len(nums) < 2:
         return '1:1'
@@ -126,10 +143,11 @@ def get_aspect_ratio_for_size(size: str) -> str:
     if width <= 0 or height <= 0:
         return '1:1'
 
-    width_scaled = int(round(width * 1000))
-    height_scaled = int(round(height * 1000))
-    gcd = math.gcd(width_scaled, height_scaled)
-    return f"{width_scaled // gcd}:{height_scaled // gcd}"
+    target_ratio = width / height
+    return min(
+        SUPPORTED_ASPECT_RATIOS,
+        key=lambda ratio: abs(SUPPORTED_ASPECT_RATIOS[ratio] - target_ratio),
+    )
 
 
 def build_rug_prompt(style: str, colors: List[str], material: str, size: str, description: str = '', shape: str = 'rectangular') -> str:
@@ -205,7 +223,7 @@ def generate_rug_images(
         except genai_errors.ServerError as e:
             logger.error("Nano Banana unavailable after retries: %s", e)
             raise
-        except ValueError as e:
+        except (ValueError, genai_errors.ClientError) as e:
             logger.warning("Attempt %d/%d produced no usable image: %s", attempts, max_attempts, e)
             continue
 
