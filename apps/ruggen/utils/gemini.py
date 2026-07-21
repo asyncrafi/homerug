@@ -186,7 +186,7 @@ def generate_rug_images(
     num_images: int = 4,
 ) -> List[dict]:
     client = _client()
-    aspect_ratio = get_aspect_ratio_for_size(size)
+    aspect_ratio = '1:1' if shape == 'round' else get_aspect_ratio_for_size(size)
     prompt = build_rug_prompt(style, colors, material, size, description, shape)
 
     logger.info("Generating %d rug images | style=%s material=%s", num_images, style, material)

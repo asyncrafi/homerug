@@ -20,13 +20,12 @@ from .utils.pricing import calculate_price
 
 logger = logging.getLogger(__name__)
 
-# Max AI generations allowed per session/IP
+# Max AI generations allowed per email account.
 MAX_GENERATIONS = 5
 EXEMPT_EMAILS = {
     'sivmey.hok@gmail.com',
     'info@maiahomes.com',
 }
-GENERATION_LIMIT_KEY = 'rug_generation_count'
 
 BLOCKED_MESSAGE = (
     "We're sorry you're not completely happy with your designs. "
@@ -34,22 +33,9 @@ BLOCKED_MESSAGE = (
 )
 
 
-def _get_generation_count(request) -> int:
-    """Return how many generations this session has used."""
-    return request.session.get(GENERATION_LIMIT_KEY, 0)
-
-
 def _is_exempt_email(email: str) -> bool:
     """Return True for emails that are exempt from generation limits."""
     return email.strip().lower() in EXEMPT_EMAILS
-
-
-def _increment_generation_count(request) -> int:
-    """Increment and persist the session generation counter. Returns new count."""
-    count = request.session.get(GENERATION_LIMIT_KEY, 0) + 1
-    request.session[GENERATION_LIMIT_KEY] = count
-    request.session.modified = True
-    return count
 
 
 class RugOptionsView(APIView):
@@ -69,9 +55,9 @@ class RugOptionsView(APIView):
                 max_generations = MAX_GENERATIONS
                 generations_remaining = max(0, MAX_GENERATIONS - used)
         else:
-            used = _get_generation_count(request)
+            used = 0
             max_generations = MAX_GENERATIONS
-            generations_remaining = max(0, MAX_GENERATIONS - used)
+            generations_remaining = MAX_GENERATIONS
 
         return Response({
             'styles': [
@@ -169,7 +155,8 @@ class GenerateRugView(APIView):
             shape=data.get('shape', 'rectangular'),
         )
 
-        generations_used = _increment_generation_count(request)
+        used = quota.count
+        remaining = None if _is_exempt_email(email) else max(0, MAX_GENERATIONS - used)
 
         return Response({
             'generation_id': str(generation.id),
@@ -184,8 +171,8 @@ class GenerateRugView(APIView):
                 'description': generation.description,
             },
             'pricing': pricing,
-            'generations_used': generations_used,
-            'generations_remaining': max(0, MAX_GENERATIONS - generations_used),
+            'generations_used': used,
+            'generations_remaining': remaining,
         }, status=status.HTTP_202_ACCEPTED)
 
 class FavoriteRugView(APIView):
@@ -203,7 +190,14 @@ class FavoriteRugView(APIView):
 
 class FavoriteListView(APIView):
     def get(self, request):
-        generations = RugGeneration.objects.filter(is_favorite=True).prefetch_related('rug_images').order_by('-created_at')
+        email = request.query_params.get('email', '').strip().lower()
+        if not email:
+            return Response({'error': 'email query param is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        generations = RugGeneration.objects.filter(
+            is_favorite=True,
+            email__iexact=email,
+        ).prefetch_related('rug_images').order_by('-created_at')
         return Response({
             'count': generations.count(),
             'results': RugGenerationSerializer(generations, many=True).data,
@@ -217,12 +211,10 @@ class RugGenerationHistoryView(APIView):
     """
     def get(self, request):
         email = request.query_params.get('email', '').strip().lower()
-        generations = RugGeneration.objects.prefetch_related('rug_images')
+        if not email:
+            return Response({'error': 'email query param is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if email:
-            generations = generations.filter(email__iexact=email)
-
-        generations = generations.order_by('-created_at')
+        generations = RugGeneration.objects.filter(email__iexact=email).prefetch_related('rug_images').order_by('-created_at')
         serializer = RugGenerationSerializer(generations, many=True)
         last_generation = serializer.data[0] if serializer.data else None
 
@@ -478,6 +470,9 @@ class CheckoutView(APIView):
 
 class RugPreviewView(APIView):
     def get(self, request, generation_id):
+        if not settings.DEBUG:
+            return HttpResponse(status=404)
+
         try:
             generation = RugGeneration.objects.prefetch_related('rug_images').get(id=generation_id)
         except RugGeneration.DoesNotExist:

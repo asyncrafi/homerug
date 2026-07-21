@@ -19,12 +19,14 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"user@example.com\",\n  \"style\": \"Persian\",\n  \"size\": \"5x8 feet\",\n  \"material\": \"Hand-Knotted New Zealand Wool\",\n  \"shape\": \"rectangular\",\n  \"colors\": [\"navy blue\", \"cream\", \"terracotta\"],\n  \"description\": \"medallion pattern with floral border\"
-}"
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"style\": \"Persian\",\n  \"size\": \"5x8 feet\",\n  \"material\": \"Hand-Knotted New Zealand Wool\",\n  \"shape\": \"rectangular\",\n  \"colors\": [\n    \"navy blue\",\n    \"cream\",\n    \"terracotta\"\n  ],\n  \"description\": \"medallion pattern with floral border\"\n}"
         },
         "url": "{{base_url}}/api/ruggen/generate/"
       }
@@ -34,12 +36,14 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"user@example.com\",\n  \"style\": \"Modern\",\n  \"size\": \"2.5x6 ft\",\n  \"material\": \"Printed Synthetic\",\n  \"shape\": \"round\",\n  \"colors\": [\"sage green\", \"cream\"],\n  \"description\": \"clean round rug with subtle pattern\"
-}"
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"style\": \"Modern\",\n  \"size\": \"2.5x6 ft\",\n  \"material\": \"Printed Synthetic\",\n  \"shape\": \"round\",\n  \"colors\": [\n    \"sage green\",\n    \"cream\"\n  ],\n  \"description\": \"clean round rug with subtle pattern\"\n}"
         },
         "url": "{{base_url}}/api/ruggen/generate/"
       }
@@ -58,7 +62,10 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
         ],
         "body": {
           "mode": "raw",
@@ -90,7 +97,10 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" }
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
         ],
         "body": {
           "mode": "raw",

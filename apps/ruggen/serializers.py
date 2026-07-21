@@ -65,7 +65,7 @@ class CheckoutSerializer(serializers.Serializer):
     placement_id = serializers.UUIDField(required=False)
     generation_id = serializers.UUIDField(required=False)
     selected_rug_index = serializers.IntegerField(min_value=0, max_value=3, required=False)
-    quantity = serializers.IntegerField(min_value=1, required=False, default=1)
+    quantity = serializers.IntegerField(min_value=1, max_value=20, required=False, default=1)
 
     def validate(self, data):
         if data.get('placement_id'):

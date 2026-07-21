@@ -48,7 +48,7 @@ class RugGenerationApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(RugGeneration.objects.get(id=generation.id).is_favorite)
 
-        list_response = self.client.get(reverse('rug-favorites'))
+        list_response = self.client.get(reverse('rug-favorites'), {'email': 'user@example.com'})
         self.assertEqual(list_response.status_code, 200)
         self.assertEqual(list_response.json()['results'][0]['id'], str(generation.id))
 
@@ -74,3 +74,10 @@ class RugGenerationApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['count'], 2)
         self.assertEqual(response.json()['last_generation']['id'], str(latest.id))
+
+    def test_history_and_favorites_require_email(self):
+        response = self.client.get(reverse('rug-favorites'))
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.get(reverse('rug-history'))
+        self.assertEqual(response.status_code, 400)
