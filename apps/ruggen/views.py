@@ -83,10 +83,9 @@ class RugOptionsView(APIView):
                 'Hand Tufted New Zealand Wool',
                 'Hand-Knotted New Zealand Wool',
                 'Hand-Knotted Silk',
-                'Cotton (Dhurrie)',
-                'Jute',
                 'Printed Synthetic',
             ],
+            'shapes': ['rectangular', 'round'],
             'suggested_colors': [
                 'navy blue', 'cream', 'terracotta', 'forest green', 'burgundy',
                 'charcoal', 'ivory', 'rust', 'sage green', 'camel', 'black', 'gold',
@@ -154,6 +153,7 @@ class GenerateRugView(APIView):
             style=data['style'],
             size=data['size'],
             material=data['material'],
+            shape=data.get('shape', 'rectangular'),
             colors=data['colors'],
             description=data.get('description', ''),
             status='pending',
@@ -166,6 +166,7 @@ class GenerateRugView(APIView):
             material=data['material'],
             size=data['size'],
             description=data.get('description', ''),
+            shape=data.get('shape', 'rectangular'),
         )
 
         generations_used = _increment_generation_count(request)
@@ -178,6 +179,7 @@ class GenerateRugView(APIView):
                 'style': generation.style,
                 'size': generation.size,
                 'material': generation.material,
+                'shape': generation.shape,
                 'colors': generation.colors,
                 'description': generation.description,
             },
@@ -185,6 +187,51 @@ class GenerateRugView(APIView):
             'generations_used': generations_used,
             'generations_remaining': max(0, MAX_GENERATIONS - generations_used),
         }, status=status.HTTP_202_ACCEPTED)
+
+class FavoriteRugView(APIView):
+    def post(self, request, generation_id):
+        try:
+            generation = RugGeneration.objects.get(id=generation_id)
+        except RugGeneration.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        is_favorite = request.data.get('is_favorite', True)
+        generation.is_favorite = bool(is_favorite)
+        generation.save(update_fields=['is_favorite'])
+        return Response(RugGenerationSerializer(generation).data)
+
+
+class FavoriteListView(APIView):
+    def get(self, request):
+        generations = RugGeneration.objects.filter(is_favorite=True).prefetch_related('rug_images').order_by('-created_at')
+        return Response({
+            'count': generations.count(),
+            'results': RugGenerationSerializer(generations, many=True).data,
+        })
+
+
+class RugGenerationHistoryView(APIView):
+    """
+    GET /api/ruggen/history/?email=user@example.com
+    Return a user's recent generations plus the latest one.
+    """
+    def get(self, request):
+        email = request.query_params.get('email', '').strip().lower()
+        generations = RugGeneration.objects.prefetch_related('rug_images')
+
+        if email:
+            generations = generations.filter(email__iexact=email)
+
+        generations = generations.order_by('-created_at')
+        serializer = RugGenerationSerializer(generations, many=True)
+        last_generation = serializer.data[0] if serializer.data else None
+
+        return Response({
+            'count': generations.count(),
+            'last_generation': last_generation,
+            'results': serializer.data,
+        })
+
 
 class GenerationDetailView(APIView):
     """
@@ -322,7 +369,9 @@ class CheckoutView(APIView):
             )
 
         return self._checkout_from_generation(
-            generation, data['selected_rug_index']
+            generation,
+            data['selected_rug_index'],
+            quantity=data.get('quantity', 1),
         )
     # Backwards-compatible checkout path if a placement already exists.
     def _checkout_from_placement(self, placement):
@@ -356,7 +405,7 @@ class CheckoutView(APIView):
         checkout_url = ''
         if product:
             variant_id = product['variants'][0]['id']
-            checkout_url = get_checkout_url(variant_id)
+            checkout_url = get_checkout_url(variant_id, quantity=1)
             shopify_url = product.get('images', [{}])[0].get('src', '')
             placement.shopify_product_id = str(product['id'])
             placement.shopify_variant_id = str(variant_id)
@@ -373,7 +422,7 @@ class CheckoutView(APIView):
             'pricing_breakdown': pricing,
         })
 
-    def _checkout_from_generation(self, generation, selected_rug_index):
+    def _checkout_from_generation(self, generation, selected_rug_index, quantity=1):
         try:
             rug_img = generation.rug_images.get(index=selected_rug_index)
         except GeneratedRugImage.DoesNotExist:
@@ -391,6 +440,7 @@ class CheckoutView(APIView):
                 'note': 'Shopify credentials not configured — mock response for testing',
                 'generation_id': str(generation.id),
                 'selected_rug_index': selected_rug_index,
+                'quantity': quantity,
             })
 
         shopify_url = upload_image_to_shopify(
@@ -410,7 +460,7 @@ class CheckoutView(APIView):
         checkout_url = ''
         if product:
             variant_id = product['variants'][0]['id']
-            checkout_url = get_checkout_url(variant_id)
+            checkout_url = get_checkout_url(variant_id, quantity=quantity)
             shopify_url = product.get('images', [{}])[0].get('src', '')
 
         return Response({
@@ -421,6 +471,7 @@ class CheckoutView(APIView):
             'pricing_breakdown': pricing,
             'generation_id': str(generation.id),
             'selected_rug_index': selected_rug_index,
+            'quantity': quantity,
         })
 
 # ── Debug preview views (dev only) ─────────────────────────────────────────
@@ -444,9 +495,9 @@ class RugPreviewView(APIView):
             <html><body style="background:#111;color:white;font-family:sans-serif;padding:20px">
             <h2>Generation: {generation_id}</h2>
             <h3>Style: {generation.style} | {generation.size} | {generation.material}</h3>
+            {images_html}
             <h4>Price: ${pricing["price"]} {pricing["currency"]} 
                 ({pricing["sqft"]} sqft × ${pricing["rate"]}/sqft)</h4>
-            {images_html}
             </body></html>
         ''')
 

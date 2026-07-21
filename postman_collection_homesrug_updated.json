@@ -1,0 +1,104 @@
+{
+  "info": {
+    "name": "HomesRug API - Postman Collection",
+    "_postman_id": "homesrug-collection-0002",
+    "description": "Collection for testing the HomesRug API endpoints. Replace {{base_url}} with your server base URL (e.g., http://localhost:8000 or https://your-vps.com).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Options",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/ruggen/options/"
+      }
+    },
+    {
+      "name": "Generate Rugs",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"style\": \"Persian\",\n  \"size\": \"5x8 feet\",\n  \"material\": \"Hand-Knotted New Zealand Wool\",\n  \"shape\": \"rectangular\",\n  \"colors\": [\"navy blue\", \"cream\", \"terracotta\"],\n  \"description\": \"medallion pattern with floral border\"
+}"
+        },
+        "url": "{{base_url}}/api/ruggen/generate/"
+      }
+    },
+    {
+      "name": "Generate Round Rug",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@example.com\",\n  \"style\": \"Modern\",\n  \"size\": \"2.5x6 ft\",\n  \"material\": \"Printed Synthetic\",\n  \"shape\": \"round\",\n  \"colors\": [\"sage green\", \"cream\"],\n  \"description\": \"clean round rug with subtle pattern\"
+}"
+        },
+        "url": "{{base_url}}/api/ruggen/generate/"
+      }
+    },
+    {
+      "name": "Get Generation Detail",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/ruggen/:generation_id/",
+        "description": "Replace :generation_id with the generation_id returned from Generate Rugs"
+      }
+    },
+    {
+      "name": "Favorite / Save Design",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"is_favorite\": true\n}"
+        },
+        "url": "{{base_url}}/api/ruggen/:generation_id/favorite/",
+        "description": "Toggle a generation as favorited/saved"
+      }
+    },
+    {
+      "name": "Get Favorites",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/ruggen/favorites/"
+      }
+    },
+    {
+      "name": "Rug Preview (HTML)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/ruggen/:generation_id/preview/",
+        "description": "HTML preview of generated rugs. Replace :generation_id accordingly."
+      }
+    },
+    {
+      "name": "Checkout",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"generation_id\": \"<paste_generation_id_here>\",\n  \"selected_rug_index\": 0,\n  \"quantity\": 3\n}"
+        },
+        "url": "{{base_url}}/api/ruggen/checkout/",
+        "description": "Checkout directly from one of the 4 generated rug designs. Send generation_id, selected image index (0-3), and quantity."
+      }
+    }
+  ]
+}

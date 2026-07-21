@@ -14,6 +14,8 @@ class RugGeneration(models.Model):
     style = models.CharField(max_length=100)
     size = models.CharField(max_length=50)
     material = models.CharField(max_length=100)
+    shape = models.CharField(max_length=30, default='rectangular')
+    is_favorite = models.BooleanField(default=False)
     colors = models.JSONField(default=list)
     description = models.TextField(blank=True)
 

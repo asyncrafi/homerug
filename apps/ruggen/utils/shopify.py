@@ -43,5 +43,5 @@ def create_draft_product(image_b64: str, style: str, size: str, material: str, c
         return resp.json().get('product')
     return None
 
-def get_checkout_url(variant_id: int) -> str:
-    return f"https://{settings.SHOPIFY_STORE_DOMAIN}/cart/{variant_id}:1"
+def get_checkout_url(variant_id: int, quantity: int = 1) -> str:
+    return f"https://{settings.SHOPIFY_STORE_DOMAIN}/cart/{variant_id}:{max(quantity, 1)}"

@@ -7,9 +7,9 @@ from .utils.gemini import generate_rug_images
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def generate_rug_images_task(self, generation_id, style, colors, material, size, description=''):
+def generate_rug_images_task(self, generation_id, style, colors, material, size, description='', shape='rectangular'):
     try:
-        images = generate_rug_images(style, colors, material, size, description)
+        images = generate_rug_images(style, colors, material, size, description, shape=shape)
     except genai_errors.ServerError as exc:
         countdown = 60 * (self.request.retries + 1)
         raise self.retry(exc=exc, countdown=countdown)

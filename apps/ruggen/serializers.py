@@ -7,16 +7,17 @@ STYLES = [
     'Scandinavian', 'Traditional', 'Contemporary', 'Tribal', 'Abstract',
 ]
 
-# Materials now include premium options
+# Materials now include premium options only.
 MATERIALS = [
     'Moroccan Shaggy Wool',
     'Hand Tufted New Zealand Wool',
     'Hand-Knotted New Zealand Wool',
     'Hand-Knotted Silk',
-    'Cotton (Dhurrie)',
-    'Jute',
     'Printed Synthetic',
 ]
+SHAPES = ['rectangular', 'round']
+
+
 class GenerateRugSerializer(serializers.Serializer):
     style = serializers.ChoiceField(choices=STYLES)
 
@@ -27,6 +28,7 @@ class GenerateRugSerializer(serializers.Serializer):
     )
 
     material = serializers.ChoiceField(choices=MATERIALS)
+    shape = serializers.ChoiceField(choices=SHAPES, required=False, default='rectangular')
 
     email = serializers.EmailField()
 
@@ -63,6 +65,7 @@ class CheckoutSerializer(serializers.Serializer):
     placement_id = serializers.UUIDField(required=False)
     generation_id = serializers.UUIDField(required=False)
     selected_rug_index = serializers.IntegerField(min_value=0, max_value=3, required=False)
+    quantity = serializers.IntegerField(min_value=1, required=False, default=1)
 
     def validate(self, data):
         if data.get('placement_id'):
@@ -86,8 +89,8 @@ class RugGenerationSerializer(serializers.ModelSerializer):
     class Meta:
         model = RugGeneration
         fields = [
-            'id', 'created_at', 'style', 'size', 'material',
-            'colors', 'description', 'status', 'rug_images',
+            'id', 'created_at', 'style', 'size', 'material', 'shape',
+            'colors', 'description', 'status', 'is_favorite', 'rug_images',
         ]
 
 class RoomPlacementSerializer(serializers.ModelSerializer):

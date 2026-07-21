@@ -1,8 +1,11 @@
 from django.urls import path
 from .views import (
     CheckoutView,
+    FavoriteListView,
+    FavoriteRugView,
     GenerateRugView,
     GenerationDetailView,
+    RugGenerationHistoryView,
     RugOptionsView,
     RugPreviewView,
 )
@@ -14,10 +17,17 @@ urlpatterns = [
     # 2. Generate 4 rug designs
     path('generate/', GenerateRugView.as_view(), name='rug-generate'),
 
-    # 3. Get generation detail + images
+    # 3. Favorite / saved designs
+    path('favorites/', FavoriteListView.as_view(), name='rug-favorites'),
+    path('<uuid:generation_id>/favorite/', FavoriteRugView.as_view(), name='rug-favorite'),
+
+    # 4. User generation history / last generation
+    path('history/', RugGenerationHistoryView.as_view(), name='rug-history'),
+
+    # 5. Get generation detail + images
     path('<uuid:generation_id>/', GenerationDetailView.as_view(), name='rug-detail'),
 
-    # 4. Create Shopify checkout directly from a selected generated rug
+    # 5. Create Shopify checkout directly from a selected generated rug
     path('checkout/', CheckoutView.as_view(), name='rug-checkout'),
 ]
 

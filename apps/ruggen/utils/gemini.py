@@ -22,6 +22,8 @@ Room-placement stage has been removed. This module now only does generation.
 import base64
 import json
 import logging
+import math
+import re
 from io import BytesIO
 from typing import List, Tuple
 
@@ -113,21 +115,41 @@ def _validate_rug_image(client, image_bytes: bytes) -> Tuple[bool, str]:
 # ─────────────────────────────────────────────
 # Rug Design Generation
 # ─────────────────────────────────────────────
-def build_rug_prompt(style: str, colors: List[str], material: str, size: str, description: str = '') -> str:
+def get_aspect_ratio_for_size(size: str) -> str:
+    """Convert a size like '2.5x6 ft' into a Gemini-friendly aspect ratio string."""
+    nums = re.findall(r"[\d]+(?:\.[\d]+)?", size)
+    if len(nums) < 2:
+        return '1:1'
+
+    width = float(nums[0])
+    height = float(nums[1])
+    if width <= 0 or height <= 0:
+        return '1:1'
+
+    width_scaled = int(round(width * 1000))
+    height_scaled = int(round(height * 1000))
+    gcd = math.gcd(width_scaled, height_scaled)
+    return f"{width_scaled // gcd}:{height_scaled // gcd}"
+
+
+def build_rug_prompt(style: str, colors: List[str], material: str, size: str, description: str = '', shape: str = 'rectangular') -> str:
     colors_str = ', '.join(colors) if colors else 'neutral tones'
     desc = f' Design detail: {description}.' if description.strip() else ''
+    shape_descriptor = 'round' if shape == 'round' else 'rectangular'
+    prompt_shape = 'a round rug' if shape == 'round' else 'a rectangular rug'
     return (
-        f"A large rectangular {style} style area rug, size {size}, made of {material}, "
+        f"Create {prompt_shape} in a {style} style, size {size}, made of {material}, "
         f"lying completely flat and fully unfolded on the floor, photographed from directly overhead "
         f"at a 90-degree bird's eye angle. Color palette: {colors_str}.{desc} "
-        f"The rug is rectangular, flat, and fills most of the frame, edge to edge, showing its full pattern. "
+        f"The rug must be {shape_descriptor}, flat, and fill most of the frame edge to edge, showing its full pattern. "
+        f"Use a {shape_descriptor} silhouette, not a rectangle if round shape is requested. "
         f"Plain seamless white background. No camera equipment, no tripods, no stands, no studio gear visible. "
         f"No bags, pouches, wallets, cushions, or rolled/folded textiles — this is a full-size flat floor rug only. "
         f"No people, no furniture, no room, no props. Clean e-commerce catalog photo, sharp focus, even lighting."
     )
 
 
-def _generate_single_rug_image(client, prompt: str) -> bytes:
+def _generate_single_rug_image(client, prompt: str, aspect_ratio: str = '1:1') -> bytes:
     """
     One API call = one image. Gemini image models (2.5 and 3.x) reject
     candidate_count > 1 with a 400 error, so batching happens by looping
@@ -139,7 +161,7 @@ def _generate_single_rug_image(client, prompt: str) -> bytes:
         [types.Content(role='user', parts=[types.Part.from_text(text=prompt)])],
         types.GenerateContentConfig(
             response_modalities=['IMAGE'],
-            image_config=types.ImageConfig(aspect_ratio='1:1'),
+            image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
         ),
     )
 
@@ -160,10 +182,12 @@ def generate_rug_images(
     material: str,
     size: str,
     description: str = '',
+    shape: str = 'rectangular',
     num_images: int = 4,
 ) -> List[dict]:
     client = _client()
-    prompt = build_rug_prompt(style, colors, material, size, description)
+    aspect_ratio = get_aspect_ratio_for_size(size)
+    prompt = build_rug_prompt(style, colors, material, size, description, shape)
 
     logger.info("Generating %d rug images | style=%s material=%s", num_images, style, material)
 
@@ -177,7 +201,7 @@ def generate_rug_images(
         attempts += 1
 
         try:
-            raw_bytes = _generate_single_rug_image(client, prompt)
+            raw_bytes = _generate_single_rug_image(client, prompt, aspect_ratio)
         except genai_errors.ServerError as e:
             logger.error("Nano Banana unavailable after retries: %s", e)
             raise
