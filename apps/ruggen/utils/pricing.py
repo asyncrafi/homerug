@@ -30,14 +30,16 @@ RATE_BY_MATERIAL = {
 DEFAULT_RATE_PER_SQFT = 30  # fallback only, shouldn't normally be hit now that every material has an explicit rate
 
 
-def _parse_dimensions(size_str: str) -> tuple[float, float, str]:
+def _parse_dimensions(size_str: str, shape: str = 'rectangular') -> tuple[float, float, str]:
     """
     Parse a size string and return (dim1, dim2, unit).
 
     Accepted formats (case-insensitive):
-        "5x8 feet"   "5 x 8 ft"   "5x8"
-        "150x240 cm" "150 x 240 cm"
+        Rectangular: "5x8 feet"   "5 x 8 ft"   "5x8"
+                     "150x240 cm" "150 x 240 cm"
+        Round: "6 feet" "6 ft" "180 cm" (single diameter)
 
+    For round rugs, returns (diameter, diameter, unit).
     Returns unit as 'ft' or 'cm'.
     Raises ValueError on bad input.
     """
@@ -49,35 +51,56 @@ def _parse_dimensions(size_str: str) -> tuple[float, float, str]:
     else:
         unit = "ft"   # default / feet / ft
 
-    # Extract two numbers
+    # Extract numbers
     nums = re.findall(r"[\d]+(?:\.[\d]+)?", s)
-    if len(nums) < 2:
-        raise ValueError(
-            f"Could not parse size '{size_str}'. "
-            "Expected format like '5x8 feet' or '150x240 cm'."
-        )
+    
+    if shape == 'round':
+        # For round rugs, accept single diameter
+        if len(nums) < 1:
+            raise ValueError(
+                f"Could not parse size '{size_str}'. "
+                "For round rugs, enter diameter like '6 feet' or '180 cm'."
+            )
+        diameter = float(nums[0])
+        return diameter, diameter, unit
+    else:
+        # For rectangular, require two dimensions
+        if len(nums) < 2:
+            raise ValueError(
+                f"Could not parse size '{size_str}'. "
+                "Expected format like '5x8 feet' or '150x240 cm'."
+            )
+        d1, d2 = float(nums[0]), float(nums[1])
+        return d1, d2, unit
 
-    d1, d2 = float(nums[0]), float(nums[1])
-    return d1, d2, unit
 
-
-def parse_size_to_sqft(size_str: str) -> float:
-    """Return area in square feet for a given size string."""
-    d1, d2, unit = _parse_dimensions(size_str)
+def parse_size_to_sqft(size_str: str, shape: str = 'rectangular') -> float:
+    """Return area in square feet for a given size string.
+    
+    For rectangular: returns length × width.
+    For round: returns π × (radius)².
+    """
+    d1, d2, unit = _parse_dimensions(size_str, shape=shape)
 
     if unit == "cm":
         # Convert cm → feet  (1 ft = 30.48 cm)
         d1 = d1 / 30.48
         d2 = d2 / 30.48
 
-    return d1 * d2
+    if shape == 'round':
+        # d1 == d2 == diameter; convert to radius and apply circular area formula
+        radius = d1 / 2.0
+        return math.pi * (radius ** 2)
+    else:
+        return d1 * d2
 
 
-def validate_minimum_size(size_str: str) -> None:
+def validate_minimum_size(size_str: str, shape: str = 'rectangular') -> None:
     """
-    Raise ValueError if either dimension is under 2 ft (or 61 cm).
+    Raise ValueError if any dimension is under 2 ft (or 61 cm).
+    For round rugs, checks the diameter.
     """
-    d1, d2, unit = _parse_dimensions(size_str)
+    d1, d2, unit = _parse_dimensions(size_str, shape=shape)
 
     if unit == "cm":
         min_dim = 61.0    # ~2 ft (60.96 cm exactly, rounded down to be lenient)
@@ -86,11 +109,18 @@ def validate_minimum_size(size_str: str) -> None:
         min_dim = 2.0
         unit_label = "ft"
 
-    if d1 < min_dim or d2 < min_dim:
-        raise ValueError(
-            f"Minimum rug size is 2x2 ft (61x61 cm). "
-            f"Got {d1:.0f}x{d2:.0f} {unit_label}."
-        )
+    if shape == 'round':
+        if d1 < min_dim:
+            raise ValueError(
+                f"Minimum diameter for round rugs is 2 ft (61 cm). "
+                f"Got {d1:.0f} {unit_label}."
+            )
+    else:
+        if d1 < min_dim or d2 < min_dim:
+            raise ValueError(
+                f"Minimum rug size is 2x2 ft (61x61 cm). "
+                f"Got {d1:.0f}x{d2:.0f} {unit_label}."
+            )
 
 
 def _round_to_x99(price: float) -> float:
@@ -105,8 +135,8 @@ def _round_to_x99(price: float) -> float:
     return round(candidate, 2)
 
 
-def calculate_price(size_str: str, material: str) -> dict:
-    sqft = parse_size_to_sqft(size_str)
+def calculate_price(size_str: str, material: str, shape: str = 'rectangular') -> dict:
+    sqft = parse_size_to_sqft(size_str, shape=shape)
     material_key = material.strip().lower()
     rate = RATE_BY_MATERIAL.get(material_key, DEFAULT_RATE_PER_SQFT)
     raw = sqft * rate

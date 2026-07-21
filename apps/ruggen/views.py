@@ -132,7 +132,7 @@ class GenerateRugView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        pricing = calculate_price(data['size'], data['material'])
+        pricing = calculate_price(data['size'], data['material'], shape=data.get('shape', 'rectangular'))
 
         generation = RugGeneration.objects.create(
             email=email,
@@ -368,7 +368,7 @@ class CheckoutView(APIView):
     # Backwards-compatible checkout path if a placement already exists.
     def _checkout_from_placement(self, placement):
         gen = placement.generation
-        pricing = calculate_price(gen.size, gen.material)
+        pricing = calculate_price(gen.size, gen.material, shape=gen.shape)
 
         if not settings.SHOPIFY_ADMIN_API_TOKEN:
             return Response({
@@ -420,7 +420,7 @@ class CheckoutView(APIView):
         except GeneratedRugImage.DoesNotExist:
             return Response({'error': 'Invalid rug index'}, status=status.HTTP_400_BAD_REQUEST)
 
-        pricing = calculate_price(generation.size, generation.material)
+        pricing = calculate_price(generation.size, generation.material, shape=generation.shape)
 
         if not settings.SHOPIFY_ADMIN_API_TOKEN:
             return Response({
@@ -478,7 +478,7 @@ class RugPreviewView(APIView):
         except RugGeneration.DoesNotExist:
             return HttpResponse("Not found", status=404)
 
-        pricing = calculate_price(generation.size, generation.material)
+        pricing = calculate_price(generation.size, generation.material, shape=generation.shape)
 
         images_html = ''.join([
             f'<div style="margin:10px;display:inline-block"><p>Rug {img.index}</p>'
@@ -504,7 +504,7 @@ class PlacementPreviewView(APIView):
         except RoomPlacement.DoesNotExist:
             return HttpResponse("Not found", status=404)
 
-        pricing = calculate_price(placement.generation.size, placement.generation.material)
+        pricing = calculate_price(placement.generation.size, placement.generation.material, shape=placement.generation.shape)
 
         return HttpResponse(f'''
             <html><body style="background:#111;color:white;font-family:sans-serif;padding:20px">
