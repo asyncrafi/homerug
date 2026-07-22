@@ -347,6 +347,9 @@ class CheckoutView(APIView):
                 )
             return self._checkout_from_placement(placement)
 
+        if data.get('items'):
+            return self._checkout_from_items(data['items'])
+
         try:
             generation = RugGeneration.objects.prefetch_related('rug_images').get(
                 id=data['generation_id']
@@ -464,6 +467,33 @@ class CheckoutView(APIView):
             'generation_id': str(generation.id),
             'selected_rug_index': selected_rug_index,
             'quantity': quantity,
+        })
+
+    def _checkout_from_items(self, items):
+        results = []
+        for item in items:
+            generation = RugGeneration.objects.prefetch_related('rug_images').filter(id=item['generation_id']).first()
+            if not generation:
+                return Response({'error': 'Generation not found'}, status=status.HTTP_404_NOT_FOUND)
+            if generation.status != 'generated':
+                return Response(
+                    {'error': f'Generation status is "{generation.status}", must be "generated"'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            results.append({
+                'generation_id': str(generation.id),
+                'selected_rug_index': item.get('selected_rug_index', 0),
+                'quantity': item.get('quantity', 1),
+                'style': generation.style,
+                'size': generation.size,
+                'material': generation.material,
+                'shape': generation.shape,
+            })
+
+        return Response({
+            'message': 'Multi-design checkout request accepted',
+            'items': results,
+            'count': len(results),
         })
 
 # ── Debug preview views (dev only) ─────────────────────────────────────────

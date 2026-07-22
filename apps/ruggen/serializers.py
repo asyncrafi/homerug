@@ -73,14 +73,26 @@ class CheckoutSerializer(serializers.Serializer):
     generation_id = serializers.UUIDField(required=False)
     selected_rug_index = serializers.IntegerField(min_value=0, max_value=3, required=False)
     quantity = serializers.IntegerField(min_value=1, max_value=20, required=False, default=1)
+    items = serializers.ListField(child=serializers.DictField(), required=False, default=list)
 
     def validate(self, data):
         if data.get('placement_id'):
             return data
+
+        # Backward-compatible single-item checkout
         if data.get('generation_id') is not None and data.get('selected_rug_index') is not None:
             return data
+
+        # New multi-item checkout payload
+        items = data.get('items') or []
+        if items:
+            for item in items:
+                if 'generation_id' not in item or 'selected_rug_index' not in item:
+                    raise serializers.ValidationError('Each checkout item must include generation_id and selected_rug_index.')
+            return data
+
         raise serializers.ValidationError(
-            'Provide placement_id or generation_id and selected_rug_index.'
+            'Provide placement_id, or generation_id + selected_rug_index, or an items list.'
         )
 
 
