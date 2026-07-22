@@ -99,7 +99,7 @@ class CheckoutSerializer(serializers.Serializer):
 class GeneratedRugImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = GeneratedRugImage
-        fields = ['index', 'base64_data', 'mime_type']
+        fields = ['index', 'base64_data', 'mime_type', 'is_favorite']
 
 
 class RugGenerationSerializer(serializers.ModelSerializer):
@@ -110,7 +110,7 @@ class RugGenerationSerializer(serializers.ModelSerializer):
         model = RugGeneration
         fields = [
             'id', 'created_at', 'style', 'size', 'material', 'shape',
-            'colors', 'description', 'status', 'is_favorite', 'rug_images',
+            'colors', 'description', 'status', 'rug_images',
             'pricing',
         ]
 

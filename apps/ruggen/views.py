@@ -177,30 +177,86 @@ class GenerateRugView(APIView):
 
 class FavoriteRugView(APIView):
     def post(self, request, generation_id):
-        try:
-            generation = RugGeneration.objects.get(id=generation_id)
-        except RugGeneration.DoesNotExist:
-            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
-
+        """
+        POST /api/ruggen/<generation_id>/favorite/
+        
+        Request body:
+        {
+            "index": 0,           # which variant (0, 1, 2, 3, etc)
+            "is_favorite": true   # or false to unfavorite
+        }
+        """
+        index = request.data.get('index')
         is_favorite = request.data.get('is_favorite', True)
-        generation.is_favorite = bool(is_favorite)
-        generation.save(update_fields=['is_favorite'])
-        return Response(RugGenerationSerializer(generation).data)
+        
+        if index is None:
+            return Response(
+                {'error': 'index is required in request body'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            rug_image = GeneratedRugImage.objects.get(
+                generation_id=generation_id,
+                index=index
+            )
+        except GeneratedRugImage.DoesNotExist:
+            return Response(
+                {'error': 'Variant not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        rug_image.is_favorite = bool(is_favorite)
+        rug_image.save(update_fields=['is_favorite'])
+        
+        return Response({
+            'generation_id': str(generation_id),
+            'index': rug_image.index,
+            'is_favorite': rug_image.is_favorite,
+            'message': 'Favorite updated successfully'
+        })
 
 
 class FavoriteListView(APIView):
     def get(self, request):
+        """
+        GET /api/ruggen/favorites/?email=user@example.com
+        Returns all favorite rug image variants for the user.
+        """
         email = request.query_params.get('email', '').strip().lower()
         if not email:
-            return Response({'error': 'email query param is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'email query param is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        generations = RugGeneration.objects.filter(
+        # Get all favorite rug images for this email
+        favorite_images = GeneratedRugImage.objects.filter(
             is_favorite=True,
-            email__iexact=email,
-        ).prefetch_related('rug_images').order_by('-created_at')
+            generation__email__iexact=email,
+        ).select_related('generation').order_by('-generation__created_at', 'index')
+        
+        # Format response with generation context
+        favorites = []
+        for img in favorite_images:
+            favorites.append({
+                'generation_id': str(img.generation.id),
+                'index': img.index,
+                'generation': {
+                    'style': img.generation.style,
+                    'size': img.generation.size,
+                    'material': img.generation.material,
+                    'shape': img.generation.shape,
+                    'colors': img.generation.colors,
+                    'created_at': img.generation.created_at,
+                },
+                'rug_image_id': img.id,
+            })
+        
         return Response({
-            'count': generations.count(),
-            'results': RugGenerationSerializer(generations, many=True).data,
+            'count': len(favorites),
+            'email': email,
+            'results': favorites,
         })
 
 

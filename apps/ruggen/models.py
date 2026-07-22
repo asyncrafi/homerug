@@ -15,7 +15,6 @@ class RugGeneration(models.Model):
     size = models.CharField(max_length=50)
     material = models.CharField(max_length=100)
     shape = models.CharField(max_length=30, default='rectangular')
-    is_favorite = models.BooleanField(default=False)
     colors = models.JSONField(default=list)
     description = models.TextField(blank=True)
 
@@ -40,6 +39,7 @@ class GeneratedRugImage(models.Model):
     index = models.IntegerField()
     base64_data = models.TextField()
     mime_type = models.CharField(max_length=30, default='image/jpeg')
+    is_favorite = models.BooleanField(default=False)  # Favorite specific variant by index
 
     class Meta:
         ordering = ['index']
