@@ -104,13 +104,25 @@ class GeneratedRugImageSerializer(serializers.ModelSerializer):
 
 class RugGenerationSerializer(serializers.ModelSerializer):
     rug_images = GeneratedRugImageSerializer(many=True, read_only=True)
+    pricing = serializers.SerializerMethodField()
 
     class Meta:
         model = RugGeneration
         fields = [
             'id', 'created_at', 'style', 'size', 'material', 'shape',
             'colors', 'description', 'status', 'is_favorite', 'rug_images',
+            'pricing',
         ]
+
+    def get_pricing(self, obj):
+        # Computed on the fly from size/material/shape so History, Saved
+        # Designs, and the generation-detail endpoint all return a real
+        # price — not just the /generate/ response.
+        from .utils.pricing import calculate_price
+        try:
+            return calculate_price(obj.size, obj.material, shape=obj.shape)
+        except (ValueError, TypeError):
+            return None
 
 class RoomPlacementSerializer(serializers.ModelSerializer):
     class Meta:
