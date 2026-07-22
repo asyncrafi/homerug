@@ -15,7 +15,7 @@ from .serializers import (
     RugGenerationSerializer,
 )
 from .tasks import generate_rug_images_task
-from .utils.shopify import create_draft_product, get_checkout_url, upload_image_to_shopify
+from .utils.shopify import create_draft_product, get_checkout_url, get_multi_checkout_url, upload_image_to_shopify
 from .utils.pricing import calculate_price
 
 logger = logging.getLogger(__name__)
@@ -470,9 +470,14 @@ class CheckoutView(APIView):
         })
 
     def _checkout_from_items(self, items):
+        variant_pairs = []
         results = []
+        mock_mode = not settings.SHOPIFY_ADMIN_API_TOKEN
+
         for item in items:
-            generation = RugGeneration.objects.prefetch_related('rug_images').filter(id=item['generation_id']).first()
+            generation = RugGeneration.objects.prefetch_related('rug_images').filter(
+                id=item['generation_id']
+            ).first()
             if not generation:
                 return Response({'error': 'Generation not found'}, status=status.HTTP_404_NOT_FOUND)
             if generation.status != 'generated':
@@ -480,18 +485,74 @@ class CheckoutView(APIView):
                     {'error': f'Generation status is "{generation.status}", must be "generated"'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            selected_rug_index = item.get('selected_rug_index', 0)
+            quantity = item.get('quantity', 1)
+
+            try:
+                rug_img = generation.rug_images.get(index=selected_rug_index)
+            except GeneratedRugImage.DoesNotExist:
+                return Response(
+                    {'error': f'Invalid rug index for generation {generation.id}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            pricing = calculate_price(generation.size, generation.material, shape=generation.shape)
+
+            if mock_mode:
+                # No Shopify credentials configured — fabricate a variant id so
+                # multi-item mock carts still combine into one testable URL.
+                variant_pairs.append((f'MOCK_{generation.id}_{selected_rug_index}', quantity))
+                results.append({
+                    'generation_id': str(generation.id),
+                    'selected_rug_index': selected_rug_index,
+                    'quantity': quantity,
+                    'style': generation.style,
+                    'size': generation.size,
+                    'material': generation.material,
+                    'shape': generation.shape,
+                    'price': pricing['price'],
+                })
+                continue
+
+            upload_image_to_shopify(
+                image_b64=rug_img.base64_data,
+                filename=f'maia-rug-{generation.id}-{rug_img.index}.jpg',
+            )
+            product = create_draft_product(
+                image_b64=rug_img.base64_data,
+                style=generation.style,
+                size=generation.size,
+                material=generation.material,
+                colors=generation.colors,
+                price=pricing['price'],
+            )
+            if not product:
+                return Response(
+                    {'error': f'Could not create Shopify product for generation {generation.id}'},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+            variant_id = product['variants'][0]['id']
+            variant_pairs.append((variant_id, quantity))
+
             results.append({
                 'generation_id': str(generation.id),
-                'selected_rug_index': item.get('selected_rug_index', 0),
-                'quantity': item.get('quantity', 1),
+                'selected_rug_index': selected_rug_index,
+                'quantity': quantity,
                 'style': generation.style,
                 'size': generation.size,
                 'material': generation.material,
                 'shape': generation.shape,
+                'price': pricing['price'],
+                'shopify_image_url': product.get('images', [{}])[0].get('src', ''),
             })
+
+        checkout_url = get_multi_checkout_url(variant_pairs)
 
         return Response({
             'message': 'Multi-design checkout request accepted',
+            'checkout_url': checkout_url,
             'items': results,
             'count': len(results),
         })

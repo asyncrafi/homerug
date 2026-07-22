@@ -45,3 +45,14 @@ def create_draft_product(image_b64: str, style: str, size: str, material: str, c
 
 def get_checkout_url(variant_id: int, quantity: int = 1) -> str:
     return f"https://{settings.SHOPIFY_STORE_DOMAIN}/cart/{variant_id}:{max(quantity, 1)}"
+
+
+def get_multi_checkout_url(variant_quantity_pairs: list[tuple[int, int]]) -> str:
+    """
+    Build one combined Shopify cart permalink from several (variant_id, quantity)
+    pairs, e.g. [(111, 2), (222, 1)] -> https://store.myshopify.com/cart/111:2,222:1
+    Used for multi-design checkout so every selected rug lands in one cart as
+    separate line items, rather than needing separate checkout links.
+    """
+    pairs = ','.join(f"{variant_id}:{max(quantity, 1)}" for variant_id, quantity in variant_quantity_pairs)
+    return f"https://{settings.SHOPIFY_STORE_DOMAIN}/cart/{pairs}"
